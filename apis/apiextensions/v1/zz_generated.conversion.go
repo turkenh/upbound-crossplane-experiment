@@ -148,6 +148,12 @@ func (c *GeneratedRevisionSpecConverter) v1ConnectionDetailToV1beta1ConnectionDe
 func (c *GeneratedRevisionSpecConverter) v1ConvertTransformToV1beta1ConvertTransform(source ConvertTransform) v1beta1.ConvertTransform {
 	var v1beta1ConvertTransform v1beta1.ConvertTransform
 	v1beta1ConvertTransform.ToType = source.ToType
+	var pV1beta1ConvertTransformFormat *v1beta1.ConvertTransformFormat
+	if source.Format != nil {
+		v1beta1ConvertTransformFormat := v1beta1.ConvertTransformFormat(*source.Format)
+		pV1beta1ConvertTransformFormat = &v1beta1ConvertTransformFormat
+	}
+	v1beta1ConvertTransform.Format = pV1beta1ConvertTransformFormat
 	return v1beta1ConvertTransform
 }
 func (c *GeneratedRevisionSpecConverter) v1JSONToV1JSON(source v1.JSON) v1.JSON {
@@ -471,6 +477,12 @@ func (c *GeneratedRevisionSpecConverter) v1beta1ConnectionDetailToV1ConnectionDe
 func (c *GeneratedRevisionSpecConverter) v1beta1ConvertTransformToV1ConvertTransform(source v1beta1.ConvertTransform) ConvertTransform {
 	var v1ConvertTransform ConvertTransform
 	v1ConvertTransform.ToType = source.ToType
+	var pV1ConvertTransformFormat *ConvertTransformFormat
+	if source.Format != nil {
+		v1ConvertTransformFormat := ConvertTransformFormat(*source.Format)
+		pV1ConvertTransformFormat = &v1ConvertTransformFormat
+	}
+	v1ConvertTransform.Format = pV1ConvertTransformFormat
 	return v1ConvertTransform
 }
 func (c *GeneratedRevisionSpecConverter) v1beta1MapTransformToV1MapTransform(source v1beta1.MapTransform) MapTransform {
