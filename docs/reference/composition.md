@@ -734,6 +734,12 @@ Currently only `multiply` is supported.
      type: Convert
      convert: ToJson
 
+# The output will be the hash of the JSON representation of the 'from' field.
+- type: string
+  string:
+     type: Convert
+     convert: ToSha1 # alternatives: 'ToSha256' or 'ToSha512'
+
 # If the value of the 'from' field is https://crossplane.io, the value of the 'to' field will
 # be set to crossplane.io
 - type: string
