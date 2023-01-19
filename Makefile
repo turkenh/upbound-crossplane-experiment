@@ -20,6 +20,8 @@ S3_BUCKET ?= crossplane.releases
 # ====================================================================================
 # Setup Go
 
+DEBUG = true
+GO_BUILDFLAGS = -gcflags="all=-N -l"
 # Set a sane default so that the nprocs calculation below is less noisy on the initial
 # loading of this file
 NPROCS ?= 1

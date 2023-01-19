@@ -19,6 +19,16 @@ ARG TARGETARCH
 ADD bin/$TARGETOS\_$TARGETARCH/crossplane /usr/local/bin/
 ADD crds /crds
 ADD webhookconfigurations /webhookconfigurations
+<<<<<<< Updated upstream
+EXPOSE 8080
+USER 65532
+ENTRYPOINT ["crossplane"]
+||||||| Stash base
+EXPOSE 8080
+USER 65532
+ENTRYPOINT ["crossplane"]
+=======
 #USER ROOT
 
 ENTRYPOINT ["/dlv", "--listen=:40000", "--headless=true", "--api-version=2", "--accept-multiclient", "exec", "/usr/local/bin/crossplane", "--"]
+>>>>>>> Stashed changes
