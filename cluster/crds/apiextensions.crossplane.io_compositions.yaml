@@ -455,6 +455,21 @@ spec:
                           - Always
                           - Never
                           type: string
+                        imagePullSecrets:
+                          description: Secrets for pulling function images.
+                          items:
+                            description: ContainerFunctionImagePullSecret specifies
+                              secrets which contain image credentials
+                            properties:
+                              name:
+                                description: Kubernetes secrets name for Composition
+                                  Function images. Uses crossplane namespace and service
+                                  account by default.
+                                type: string
+                            required:
+                            - name
+                            type: object
+                          type: array
                         network:
                           description: Network configuration for the Composition Function.
                           properties:

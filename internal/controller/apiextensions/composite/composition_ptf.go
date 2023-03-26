@@ -17,8 +17,12 @@ package composite
 
 import (
 	"context"
+	"os"
 	"sort"
 
+	"github.com/google/go-containerregistry/pkg/authn"
+	"github.com/google/go-containerregistry/pkg/authn/k8schain"
+	"github.com/google/go-containerregistry/pkg/name"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -29,6 +33,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/json"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
 
@@ -708,7 +713,8 @@ func (p *FunctionPipeline) RunFunctionPipeline(ctx context.Context, req Composit
 }
 
 // RunFunction calls an external container function runner via gRPC.
-func RunFunction(ctx context.Context, fnio *iov1alpha1.FunctionIO, fn *v1.ContainerFunction) (*iov1alpha1.FunctionIO, error) {
+func RunFunction(ctx context.Context, fnio *iov1alpha1.FunctionIO, fn *v1.ContainerFunction) (*iov1alpha1.FunctionIO, error) { //nolint:gocyclo // Complexity is equal to 13 now
+
 	in, err := yaml.Marshal(fnio)
 	if err != nil {
 		return nil, errors.Wrap(err, errMarshalFnIO)
@@ -724,10 +730,34 @@ func RunFunction(ctx context.Context, fnio *iov1alpha1.FunctionIO, fn *v1.Contai
 		return nil, errors.Wrap(err, errDialRunner)
 	}
 
+	k8schainOpts := k8schain.Options{}
+	if sa := os.Getenv("POD_SERVICE_ACCOUNT"); sa != "" {
+		k8schainOpts.ServiceAccountName = sa
+	}
+	if ns := os.Getenv("POD_NAMESPACE"); ns != "" {
+		k8schainOpts.Namespace = ns
+	}
+	if fn.ImagePullSecrets != nil {
+		for _, ips := range fn.ImagePullSecrets {
+			k8schainOpts.ImagePullSecrets = append(k8schainOpts.ImagePullSecrets, ips.Name)
+		}
+	}
+	keychain, err := k8schain.NewInCluster(ctx, k8schainOpts)
+	if err != nil {
+		if errors.Is(err, rest.ErrNotInCluster) {
+			keychain = nil
+		} else {
+			return nil, err
+		}
+	}
+	pullConfig, err := ImagePullConfig(fn, keychain)
+	if err != nil {
+		return nil, err
+	}
 	req := &fnv1alpha1.RunFunctionRequest{
 		Image:             fn.Image,
 		Input:             in,
-		ImagePullConfig:   ImagePullConfig(fn),
+		ImagePullConfig:   pullConfig,
 		RunFunctionConfig: RunFunctionConfig(fn),
 	}
 	rsp, err := fnv1alpha1.NewContainerizedFunctionRunnerServiceClient(conn).RunFunction(ctx, req)
@@ -785,8 +815,7 @@ func ParseDesiredResource(dr iov1alpha1.DesiredResource, owner resource.Object) 
 }
 
 // ImagePullConfig builds an ImagePullConfig for a FunctionIO.
-func ImagePullConfig(fn *v1.ContainerFunction) *fnv1alpha1.ImagePullConfig {
-	// TODO(negz): Use k8schain at this end to resolve auth.
+func ImagePullConfig(fn *v1.ContainerFunction, keychain authn.Keychain) (*fnv1alpha1.ImagePullConfig, error) {
 	cfg := &fnv1alpha1.ImagePullConfig{}
 
 	if fn.ImagePullPolicy != nil {
@@ -801,8 +830,28 @@ func ImagePullConfig(fn *v1.ContainerFunction) *fnv1alpha1.ImagePullConfig {
 			cfg.PullPolicy = fnv1alpha1.ImagePullPolicy_IMAGE_PULL_POLICY_IF_NOT_PRESENT
 		}
 	}
-
-	return cfg
+	if keychain != nil {
+		tag, err := name.NewTag(fn.Image)
+		if err != nil {
+			return nil, err
+		}
+		auth, err := keychain.Resolve(tag)
+		if err != nil {
+			return nil, err
+		}
+		a, err := auth.Authorization()
+		if err != nil {
+			return nil, err
+		}
+		cfg.Auth = &fnv1alpha1.ImagePullAuth{
+			Username:      a.Username,
+			Password:      a.Password,
+			Auth:          a.Auth,
+			IdentityToken: a.IdentityToken,
+			RegistryToken: a.RegistryToken,
+		}
+	}
+	return cfg, nil
 }
 
 // RunFunctionConfig builds a RunFunctionConfig for a FunctionIO.

@@ -830,6 +830,10 @@ type ContainerFunction struct {
 	// +kubebuilder:default="20s"
 	Timeout *metav1.Duration `json:"timeout,omitempty"`
 
+	// Secrets for pulling function images.
+	// +optional
+	ImagePullSecrets []ContainerFunctionImagePullSecret `json:"imagePullSecrets,omitempty"`
+
 	// Network configuration for the Composition Function.
 	// +optional
 	Network *ContainerFunctionNetwork `json:"network,omitempty"`
@@ -841,6 +845,13 @@ type ContainerFunction struct {
 	// Runner configuration for the Composition Function.
 	// +optional
 	Runner *ContainerFunctionRunner `json:"runner,omitempty"`
+}
+
+// ContainerFunctionImagePullSecret specifies secrets which contain image credentials
+type ContainerFunctionImagePullSecret struct {
+	// Kubernetes secrets name for Composition Function images.
+	// Uses crossplane namespace and service account by default.
+	Name string `json:"name"`
 }
 
 // A ContainerFunctionNetworkPolicy specifies the network policy under which

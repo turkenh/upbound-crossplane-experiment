@@ -171,6 +171,11 @@ func (c *GeneratedRevisionSpecConverter) v1ConnectionDetailToV1beta1ConnectionDe
 	v1beta1ConnectionDetail.Value = pString4
 	return v1beta1ConnectionDetail
 }
+func (c *GeneratedRevisionSpecConverter) v1ContainerFunctionImagePullSecretToV1beta1ContainerFunctionImagePullSecret(source ContainerFunctionImagePullSecret) v1beta1.ContainerFunctionImagePullSecret {
+	var v1beta1ContainerFunctionImagePullSecret v1beta1.ContainerFunctionImagePullSecret
+	v1beta1ContainerFunctionImagePullSecret.Name = source.Name
+	return v1beta1ContainerFunctionImagePullSecret
+}
 func (c *GeneratedRevisionSpecConverter) v1ContainerFunctionNetworkToV1beta1ContainerFunctionNetwork(source ContainerFunctionNetwork) v1beta1.ContainerFunctionNetwork {
 	var v1beta1ContainerFunctionNetwork v1beta1.ContainerFunctionNetwork
 	var pV1beta1ContainerFunctionNetworkPolicy *v1beta1.ContainerFunctionNetworkPolicy
@@ -222,6 +227,11 @@ func (c *GeneratedRevisionSpecConverter) v1ContainerFunctionToV1beta1ContainerFu
 		pV1Duration = &v1Duration
 	}
 	v1beta1ContainerFunction.Timeout = pV1Duration
+	v1beta1ContainerFunctionImagePullSecretList := make([]v1beta1.ContainerFunctionImagePullSecret, len(source.ImagePullSecrets))
+	for i := 0; i < len(source.ImagePullSecrets); i++ {
+		v1beta1ContainerFunctionImagePullSecretList[i] = c.v1ContainerFunctionImagePullSecretToV1beta1ContainerFunctionImagePullSecret(source.ImagePullSecrets[i])
+	}
+	v1beta1ContainerFunction.ImagePullSecrets = v1beta1ContainerFunctionImagePullSecretList
 	var pV1beta1ContainerFunctionNetwork *v1beta1.ContainerFunctionNetwork
 	if source.Network != nil {
 		v1beta1ContainerFunctionNetwork := c.v1ContainerFunctionNetworkToV1beta1ContainerFunctionNetwork(*source.Network)
@@ -691,6 +701,11 @@ func (c *GeneratedRevisionSpecConverter) v1beta1ConnectionDetailToV1ConnectionDe
 	v1ConnectionDetail.Value = pString4
 	return v1ConnectionDetail
 }
+func (c *GeneratedRevisionSpecConverter) v1beta1ContainerFunctionImagePullSecretToV1ContainerFunctionImagePullSecret(source v1beta1.ContainerFunctionImagePullSecret) ContainerFunctionImagePullSecret {
+	var v1ContainerFunctionImagePullSecret ContainerFunctionImagePullSecret
+	v1ContainerFunctionImagePullSecret.Name = source.Name
+	return v1ContainerFunctionImagePullSecret
+}
 func (c *GeneratedRevisionSpecConverter) v1beta1ContainerFunctionNetworkToV1ContainerFunctionNetwork(source v1beta1.ContainerFunctionNetwork) ContainerFunctionNetwork {
 	var v1ContainerFunctionNetwork ContainerFunctionNetwork
 	var pV1ContainerFunctionNetworkPolicy *ContainerFunctionNetworkPolicy
@@ -742,6 +757,11 @@ func (c *GeneratedRevisionSpecConverter) v1beta1ContainerFunctionToV1ContainerFu
 		pV1Duration = &v1Duration
 	}
 	v1ContainerFunction.Timeout = pV1Duration
+	v1ContainerFunctionImagePullSecretList := make([]ContainerFunctionImagePullSecret, len(source.ImagePullSecrets))
+	for i := 0; i < len(source.ImagePullSecrets); i++ {
+		v1ContainerFunctionImagePullSecretList[i] = c.v1beta1ContainerFunctionImagePullSecretToV1ContainerFunctionImagePullSecret(source.ImagePullSecrets[i])
+	}
+	v1ContainerFunction.ImagePullSecrets = v1ContainerFunctionImagePullSecretList
 	var pV1ContainerFunctionNetwork *ContainerFunctionNetwork
 	if source.Network != nil {
 		v1ContainerFunctionNetwork := c.v1beta1ContainerFunctionNetworkToV1ContainerFunctionNetwork(*source.Network)

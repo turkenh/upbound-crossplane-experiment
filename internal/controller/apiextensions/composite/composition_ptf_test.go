@@ -1703,7 +1703,7 @@ func TestImagePullConfig(t *testing.T) {
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 
-			got := ImagePullConfig(tc.fn)
+			got, _ := ImagePullConfig(tc.fn, nil)
 
 			if diff := cmp.Diff(tc.want, got, protocmp.Transform()); diff != "" {
 				t.Errorf("\n%s\nImagePullConfig(...): -want, +got:\n%s", tc.reason, diff)
