@@ -38,7 +38,6 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
 	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured"
 	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured/composite"
-
 	v1 "github.com/crossplane/crossplane/apis/apiextensions/v1"
 	env "github.com/crossplane/crossplane/internal/controller/apiextensions/composite/environment"
 )
@@ -249,9 +248,9 @@ func WithCompositionFetcher(f CompositionFetcher) ReconcilerOption {
 
 // WithCompositionValidator specifies how the Reconciler should validate
 // Compositions.
-func WithCompositionValidator(v CompositionValidator) ReconcilerOption {
+func WithCompositionValidator(v CompositionValidatorFunc) ReconcilerOption {
 	return func(r *Reconciler) {
-		r.composition.CompositionValidator = v
+		r.composition.CompositionValidatorFunc = v
 	}
 }
 
@@ -314,8 +313,15 @@ func WithComposer(c Composer) ReconcilerOption {
 
 type composition struct {
 	CompositionFetcher
-	CompositionValidator
+	CompositionValidatorFunc
 }
+
+func (c *composition) Validate(comp *v1.Composition) error {
+	return c.CompositionValidatorFunc(comp)
+}
+
+// A CompositionValidatorFunc is a function that validates a Composition.
+type CompositionValidatorFunc func(*v1.Composition) error
 
 type environment struct {
 	EnvironmentFetcher
@@ -342,11 +348,8 @@ func NewReconciler(mgr manager.Manager, of resource.CompositeKind, opts ...Recon
 
 		composition: composition{
 			CompositionFetcher: NewAPICompositionFetcher(kube),
-			CompositionValidator: ValidationChain{
-				CompositionValidatorFn(RejectMixedTemplates),
-				CompositionValidatorFn(RejectDuplicateNames),
-				CompositionValidatorFn(RejectAnonymousTemplatesWithFunctions),
-				CompositionValidatorFn(RejectFunctionsWithoutRequiredConfig),
+			CompositionValidatorFunc: func(in *v1.Composition) error {
+				return in.Validate().ToAggregate()
 			},
 		},
 
@@ -482,8 +485,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 		return reconcile.Result{Requeue: true}, errors.Wrap(r.client.Status().Update(ctx, xr), errUpdateStatus)
 	}
 
-	// TODO(negz): Composition validation should be handled by a validation
-	// webhook, not by this controller.
 	if err := r.composition.Validate(comp); err != nil {
 		log.Debug(errValidate, "error", err)
 		err = errors.Wrap(err, errValidate)
