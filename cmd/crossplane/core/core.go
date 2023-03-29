@@ -26,7 +26,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	"github.com/crossplane/crossplane-runtime/pkg/controller"
 	"github.com/crossplane/crossplane-runtime/pkg/errors"
@@ -40,8 +39,8 @@ import (
 	pkgcontroller "github.com/crossplane/crossplane/internal/controller/pkg/controller"
 	"github.com/crossplane/crossplane/internal/features"
 	"github.com/crossplane/crossplane/internal/transport"
+	"github.com/crossplane/crossplane/internal/validation/apiextensions/v1/composition"
 	"github.com/crossplane/crossplane/internal/xpkg"
-	"github.com/crossplane/crossplane/pkg/validation/apiextensions/v1/composition"
 )
 
 // Command runs the core crossplane controllers
@@ -178,9 +177,9 @@ func (c *startCommand) Run(s *runtime.Scheme, log logging.Logger) error { //noli
 		if err := (&apiextensionsv1.CompositeResourceDefinition{}).SetupWebhookWithManager(mgr); err != nil {
 			return errors.Wrap(err, "cannot setup webhook for compositeresourcedefinitions")
 		}
-		validationHandler := composition.NewHandler(&composition.CustomValidator{})
-		mgr.GetWebhookServer().Register(apiextensionsv1.CompositionValidatingWebhookPath,
-			&webhook.Admission{Handler: validationHandler})
+		if err := composition.SetupWebhookWithManager(mgr); err != nil {
+			return errors.Wrap(err, "cannot setup webhook for compositions")
+		}
 	}
 
 	return errors.Wrap(mgr.Start(ctrl.SetupSignalHandler()), "Cannot start controller manager")

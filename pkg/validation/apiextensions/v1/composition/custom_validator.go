@@ -27,12 +27,11 @@ import (
 	v1 "github.com/crossplane/crossplane/apis/apiextensions/v1"
 )
 
-// CustomValidator gathers required information using the provided client.Reader and then use them to render and
-// validated a Composition.
-type CustomValidator struct{}
+// Validator validates the provided Composition.
+type Validator struct{}
 
-// Validate validates the Composition by rendering it and then validating the rendered resources.
-func (c *CustomValidator) Validate(_ context.Context, obj runtime.Object) (warns []string, err error) {
+// Validate validates the provided Composition.
+func (c *Validator) Validate(_ context.Context, obj runtime.Object) (warns []string, err error) {
 	comp, ok := obj.(*v1.Composition)
 	if !ok {
 		return warns, xperrors.New("not a v1 Composition")
