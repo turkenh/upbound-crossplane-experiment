@@ -32,8 +32,7 @@ import (
 type CustomValidator struct{}
 
 // Validate validates the Composition by rendering it and then validating the rendered resources.
-func (c *CustomValidator) Validate(_ context.Context, obj runtime.Object) ([]string, error) {
-	var warns []string
+func (c *CustomValidator) Validate(_ context.Context, obj runtime.Object) (warns []string, err error) {
 	comp, ok := obj.(*v1.Composition)
 	if !ok {
 		return warns, xperrors.New("not a v1 Composition")
@@ -44,5 +43,5 @@ func (c *CustomValidator) Validate(_ context.Context, obj runtime.Object) ([]str
 		return warns, apierrors.NewInvalid(comp.GroupVersionKind().GroupKind(), comp.GetName(), errs)
 	}
 	// TODO(phisco): get schemas and validate the Composition against it
-	return warns, nil
+	return nil, nil
 }
