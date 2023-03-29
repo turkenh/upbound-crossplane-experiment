@@ -25,42 +25,61 @@ import (
 )
 
 func TestReadinessCheck_Validate(t *testing.T) {
-	tests := []struct {
-		name string
-		r    *ReadinessCheck
-		want *field.Error
+	type args struct {
+		r *ReadinessCheck
+	}
+	type want struct {
+		output *field.Error
+	}
+
+	cases := map[string]struct {
+		reason string
+		args   args
+		want   want
 	}{
-		{
-			name: "Valid type none",
-			r: &ReadinessCheck{
-				Type: ReadinessCheckTypeNone,
+		"ValidTypeNone": {
+			reason: "Type none should be valid",
+			args: args{
+				r: &ReadinessCheck{
+					Type: ReadinessCheckTypeNone,
+				},
 			},
 		},
-		{
-			name: "Valid type matchLabels",
-			r: &ReadinessCheck{
-				Type:        ReadinessCheckTypeMatchString,
-				MatchString: "foo",
-				FieldPath:   "spec.foo",
+		"ValidTypeMatchString": {
+			reason: "Type matchString should be valid",
+			args: args{
+				r: &ReadinessCheck{
+					Type:        ReadinessCheckTypeMatchString,
+					MatchString: "foo",
+					FieldPath:   "spec.foo",
+				},
 			},
 		},
-		{
-			name: "Invalid type",
-			r: &ReadinessCheck{
-				Type: "foo",
+		"InvalidType": {
+			reason: "Invalid type",
+			args: args{
+				r: &ReadinessCheck{
+					Type: "foo",
+				},
 			},
-			want: &field.Error{
-				Type:     field.ErrorTypeInvalid,
-				Field:    "type",
-				BadValue: "foo",
+			want: want{
+				output: &field.Error{
+					Type:     field.ErrorTypeInvalid,
+					Field:    "type",
+					BadValue: "foo",
+				},
 			},
 		},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := tt.r.Validate()
-			if diff := cmp.Diff(got, tt.want, cmpopts.IgnoreFields(field.Error{}, "Detail")); diff != "" {
-				t.Errorf("Validate(...): -want, +got:\n%s", diff)
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			got := tc.args.r.Validate()
+			if diff := cmp.Diff(
+				tc.want.output,
+				got,
+				cmpopts.IgnoreFields(field.Error{}, "Detail", "BadValue"),
+			); diff != "" {
+				t.Errorf("%s\nValidate(...): -want, +got:\n%s", tc.reason, diff)
 			}
 		})
 	}

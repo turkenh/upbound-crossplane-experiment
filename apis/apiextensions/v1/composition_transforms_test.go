@@ -17,6 +17,7 @@ limitations under the License.
 package v1
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -24,302 +25,392 @@ import (
 	extv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/utils/pointer"
+
+	"github.com/crossplane/crossplane-runtime/pkg/test"
 )
 
-func TestTransform_Validate(t1 *testing.T) {
-
-	tests := []struct {
-		name      string
+func TestTransform_Validate(t *testing.T) {
+	type args struct {
 		transform *Transform
-		want      *field.Error
+	}
+	type want struct {
+		err *field.Error
+	}
+
+	cases := map[string]struct {
+		reason string
+		args   args
+		want   want
 	}{
-		{
-			name: "Valid Math",
-			transform: &Transform{
-				Type: TransformTypeMath,
-				Math: &MathTransform{
-					Multiply: pointer.Int64(2),
-				},
-			},
-			want: nil,
-		},
-		{
-			name: "Invalid Math",
-			transform: &Transform{
-				Type: TransformTypeMath,
-				Math: nil,
-			},
-			want: &field.Error{
-				Type:  field.ErrorTypeRequired,
-				Field: "math",
-			},
-		},
-		{
-			name: "Valid Map",
-			transform: &Transform{
-				Type: TransformTypeMap,
-				Map: &MapTransform{
-					Pairs: map[string]extv1.JSON{
-						"foo": {Raw: []byte(`"bar"`)},
+		"ValidMath": {
+			reason: "Math transform with MathTransform set should be valid",
+			args: args{
+				transform: &Transform{
+					Type: TransformTypeMath,
+					Math: &MathTransform{
+						Multiply: pointer.Int64(2),
 					},
 				},
 			},
-			want: nil,
 		},
-		{
-			name: "Invalid Map, no map",
-			transform: &Transform{
-				Type: TransformTypeMap,
-				Map:  nil,
+		"InvalidMath": {
+			reason: "Math transform with no MathTransform set should be invalid",
+			args: args{
+				transform: &Transform{
+					Type: TransformTypeMath,
+					Math: nil,
+				},
 			},
-			want: &field.Error{
-				Type:  field.ErrorTypeRequired,
-				Field: "map",
-			},
-		},
-		{
-			name: "Invalid Map, no pairs in map",
-			transform: &Transform{
-				Type: TransformTypeMap,
-				Map:  &MapTransform{},
-			},
-			want: &field.Error{
-				Type:  field.ErrorTypeRequired,
-				Field: "map.pairs",
-			},
-		},
-		{
-			name: "Invalid Match, no match",
-			transform: &Transform{
-				Type:  TransformTypeMatch,
-				Match: nil,
-			},
-			want: &field.Error{
-				Type:  field.ErrorTypeRequired,
-				Field: "match",
-			},
-		},
-		{
-			name: "Valid Match",
-			transform: &Transform{
-				Type:  TransformTypeMatch,
-				Match: &MatchTransform{},
-			},
-			want: nil,
-		},
-		{
-			name: "Invalid String, no string",
-			transform: &Transform{
-				Type:   TransformTypeString,
-				String: nil,
-			},
-			want: &field.Error{
-				Type:  field.ErrorTypeRequired,
-				Field: "string",
-			},
-		},
-		{
-			name: "Valid String",
-			transform: &Transform{
-				Type: TransformTypeString,
-				String: &StringTransform{
-					Format: pointer.String("foo"),
+			want: want{
+				&field.Error{
+					Type:  field.ErrorTypeRequired,
+					Field: "math",
 				},
 			},
 		},
-		{
-			name: "Invalid Convert, missing Convert",
-			transform: &Transform{
-				Type:    TransformTypeConvert,
-				Convert: nil,
-			},
-			want: &field.Error{
-				Type:  field.ErrorTypeRequired,
-				Field: "convert",
-			},
-		},
-		{
-			name: "Invalid Convert, unknown format",
-			transform: &Transform{
-				Type: TransformTypeConvert,
-				Convert: &ConvertTransform{
-					Format: &[]ConvertTransformFormat{"foo"}[0],
+		"ValidMap": {
+			reason: "Map transform with MapTransform set should be valid",
+			args: args{
+				transform: &Transform{
+					Type: TransformTypeMap,
+					Map: &MapTransform{
+						Pairs: map[string]extv1.JSON{
+							"foo": {Raw: []byte(`"bar"`)},
+						},
+					},
 				},
 			},
-			want: &field.Error{
-				Type:  field.ErrorTypeInvalid,
-				Field: "convert.format",
-			},
 		},
-		{
-			name: "Invalid Convert, unknown type",
-			transform: &Transform{
-				Type: TransformTypeConvert,
-				Convert: &ConvertTransform{
-					ToType: TransformIOType("foo"),
+		"InvalidMapNoMap": {
+			reason: "Map transform with no map set should be invalid",
+			args: args{
+				transform: &Transform{
+					Type: TransformTypeMap,
+					Map:  nil,
 				},
 			},
-			want: &field.Error{
-				Type:  field.ErrorTypeInvalid,
-				Field: "convert.toType",
+			want: want{
+				err: &field.Error{
+					Type:  field.ErrorTypeRequired,
+					Field: "map",
+				},
 			},
 		},
-		{
-			name: "Valid Convert",
-			transform: &Transform{
-				Type: TransformTypeConvert,
-				Convert: &ConvertTransform{
-					Format: &[]ConvertTransformFormat{ConvertTransformFormatNone}[0],
+		"InvalidMapNoPairs": {
+			reason: "Map transform with no pairs in map should be invalid",
+			args: args{
+				transform: &Transform{
+					Type: TransformTypeMap,
+					Map:  &MapTransform{},
+				},
+			},
+			want: want{
+				err: &field.Error{
+					Type:  field.ErrorTypeRequired,
+					Field: "map.pairs",
+				},
+			},
+		},
+		"InvalidMatchNoMatch": {
+			reason: "Match transform with no match set should be invalid",
+			args: args{
+				transform: &Transform{
+					Type:  TransformTypeMatch,
+					Match: nil,
+				},
+			},
+			want: want{
+				&field.Error{
+					Type:  field.ErrorTypeRequired,
+					Field: "match",
+				},
+			},
+		},
+		"ValidMatchEmptyTransform": {
+			reason: "Match transform with empty MatchTransform should be valid",
+			args: args{
+				transform: &Transform{
+					Type:  TransformTypeMatch,
+					Match: &MatchTransform{},
+				},
+			},
+		},
+		"InvalidStringNoString": {
+			reason: "String transform with no string set should be invalid",
+			args: args{
+				transform: &Transform{
+					Type:   TransformTypeString,
+					String: nil,
+				},
+			},
+			want: want{
+				err: &field.Error{
+					Type:  field.ErrorTypeRequired,
+					Field: "string",
+				},
+			},
+		},
+		"ValidString": {
+			reason: "String transform with set string should be valid",
+			args: args{
+				transform: &Transform{
+					Type: TransformTypeString,
+					String: &StringTransform{
+						Format: pointer.String("foo"),
+					},
+				},
+			},
+		},
+		"InvalidConvertMissingConvert": {
+			reason: "Convert transform missing Convert should be invalid",
+			args: args{
+				transform: &Transform{
+					Type:    TransformTypeConvert,
+					Convert: nil,
+				},
+			},
+			want: want{
+				err: &field.Error{
+					Type:  field.ErrorTypeRequired,
+					Field: "convert",
+				},
+			},
+		},
+		"InvalidConvertUnknownFormat": {
+			reason: "Convert transform with unknown format should be invalid",
+			args: args{
+				transform: &Transform{
+					Type: TransformTypeConvert,
+					Convert: &ConvertTransform{
+						Format: &[]ConvertTransformFormat{"foo"}[0],
+					},
+				},
+			},
+			want: want{
+				err: &field.Error{
+					Type:  field.ErrorTypeInvalid,
+					Field: "convert.format",
+				},
+			},
+		},
+		"InvalidConvertUnknownToType": {
+			reason: "Convert transform with unknown toType should be invalid",
+			args: args{
+				transform: &Transform{
+					Type: TransformTypeConvert,
+					Convert: &ConvertTransform{
+						ToType: TransformIOType("foo"),
+					},
+				},
+			},
+			want: want{
+				err: &field.Error{
+					Type:  field.ErrorTypeInvalid,
+					Field: "convert.toType",
+				},
+			},
+		},
+		"ValidConvert": {
+			reason: "Convert transform with valid format and toType should be valid",
+			args: args{
+				transform: &Transform{
+					Type: TransformTypeConvert,
+					Convert: &ConvertTransform{
+						Format: &[]ConvertTransformFormat{ConvertTransformFormatNone}[0],
+						ToType: TransformIOTypeInt,
+					},
+				},
+			},
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			err := tc.args.transform.Validate()
+			if diff := cmp.Diff(
+				tc.want.err,
+				err,
+				cmpopts.IgnoreFields(field.Error{}, "Detail", "BadValue"),
+			); diff != "" {
+				t.Errorf("%s\nValidate(...): -want, +got:\n%s", tc.reason, diff)
+			}
+		})
+	}
+}
+
+func TestConvertTransform_GetConversionFunc(t *testing.T) {
+	type args struct {
+		ct   *ConvertTransform
+		from TransformIOType
+	}
+	type want struct {
+		err error
+	}
+	cases := map[string]struct {
+		reason string
+		args   args
+		want   want
+	}{
+		"IntToString": {
+			reason: "Int to String should be valid",
+			args: args{
+				ct: &ConvertTransform{
+					ToType: TransformIOTypeString,
+				},
+				from: TransformIOTypeInt,
+			},
+		},
+		"IntToInt": {
+			reason: "Int to Int should be valid",
+			args: args{
+				ct: &ConvertTransform{
 					ToType: TransformIOTypeInt,
 				},
+				from: TransformIOTypeInt,
 			},
-			want: nil,
+		},
+		"IntToInt64": {
+			reason: "Int to Int64 should be valid",
+			args: args{
+				ct: &ConvertTransform{
+					ToType: TransformIOTypeInt,
+				},
+				from: TransformIOTypeInt64,
+			},
+		},
+		"Int64ToInt": {
+			reason: "Int64 to Int should be valid",
+			args: args{
+				ct: &ConvertTransform{
+					ToType: TransformIOTypeInt64,
+				},
+				from: TransformIOTypeInt,
+			},
+		},
+		"IntToFloat": {
+			reason: "Int to Float should be valid",
+			args: args{
+				ct: &ConvertTransform{
+					ToType: TransformIOTypeInt,
+				},
+				from: TransformIOTypeFloat64,
+			},
+		},
+		"IntToBool": {
+			reason: "Int to Bool should be valid",
+			args: args{
+				ct: &ConvertTransform{
+					ToType: TransformIOTypeInt,
+				},
+				from: TransformIOTypeBool,
+			},
+		},
+		"StringToIntInvalidFormat": {
+			reason: "String to Int with invalid format should be invalid",
+			args: args{
+				ct: &ConvertTransform{
+					ToType: TransformIOTypeInt,
+					Format: &[]ConvertTransformFormat{"wrong"}[0],
+				},
+				from: TransformIOTypeString,
+			},
+			want: want{
+				err: fmt.Errorf("conversion from string to int64 is not supported with format wrong"),
+			},
+		},
+		"IntToIntInvalidFormat": {
+			reason: "Int to Int, invalid format ignored because it is the same type",
+			args: args{
+				ct: &ConvertTransform{
+					ToType: TransformIOTypeInt,
+					Format: &[]ConvertTransformFormat{"wrong"}[0],
+				},
+				from: TransformIOTypeInt,
+			},
 		},
 	}
-	for _, tt := range tests {
-		t1.Run(tt.name, func(t1 *testing.T) {
-			got := tt.transform.Validate()
-			if diff := cmp.Diff(got, tt.want, cmpopts.IgnoreFields(field.Error{}, "Detail", "BadValue")); diff != "" {
-				t1.Errorf("Validate(...) = -want, +got\n%s\n", diff)
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			_, err := tc.args.ct.GetConversionFunc(tc.args.from)
+			if diff := cmp.Diff(tc.want.err, err, test.EquateErrors()); diff != "" {
+				t.Errorf("%s\nGetConversionFunc(...): -want, +got:\n%s", tc.reason, diff)
 			}
 		})
 	}
 }
 
-func TestConvertTransform_GetConversionFunc(t1 *testing.T) {
-	tests := []struct {
-		name    string
-		ct      *ConvertTransform
-		from    TransformIOType
-		wantErr bool
-	}{
-		{
-			name: "Int to String",
-			ct: &ConvertTransform{
-				ToType: TransformIOTypeString,
-			},
-			from: TransformIOTypeInt,
-		},
-		{
-			name: "Int to Int",
-			ct: &ConvertTransform{
-				ToType: TransformIOTypeInt,
-			},
-			from: TransformIOTypeInt,
-		},
-		{
-			name: "Int to Int64",
-			ct: &ConvertTransform{
-				ToType: TransformIOTypeInt,
-			},
-			from: TransformIOTypeInt64,
-		},
-		{
-			name: "Int64 to Int",
-			ct: &ConvertTransform{
-				ToType: TransformIOTypeInt64,
-			},
-			from: TransformIOTypeInt,
-		},
-		{
-			name: "Int to Float",
-			ct: &ConvertTransform{
-				ToType: TransformIOTypeInt,
-			},
-			from: TransformIOTypeFloat64,
-		},
-		{
-			name: "Int to Bool",
-			ct: &ConvertTransform{
-				ToType: TransformIOTypeInt,
-			},
-			from: TransformIOTypeBool,
-		},
-		{
-			name: "String to Int invalid format",
-			ct: &ConvertTransform{
-				ToType: TransformIOTypeInt,
-				Format: &[]ConvertTransformFormat{"wrong"}[0],
-			},
-			from:    TransformIOTypeString,
-			wantErr: true,
-		},
-		{
-			name: "Int to Int, invalid format ignored",
-			ct: &ConvertTransform{
-				ToType: TransformIOTypeInt,
-				Format: &[]ConvertTransformFormat{"wrong"}[0],
-			},
-			from:    TransformIOTypeInt,
-			wantErr: false,
-		},
-	}
-	for _, tt := range tests {
-		t1.Run(tt.name, func(t1 *testing.T) {
-			_, err := tt.ct.GetConversionFunc(tt.from)
-			if (err != nil) != tt.wantErr {
-				t1.Errorf("GetConversionFunc() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-		})
-	}
-}
-
-func TestTransform_GetOutputType(t1 *testing.T) {
-	tests := []struct {
-		name      string
+func TestTransform_GetOutputType(t *testing.T) {
+	type args struct {
 		transform *Transform
-		want      *TransformIOType
-		wantErr   bool
+	}
+	type want struct {
+		output *TransformIOType
+		err    error
+	}
+	cases := map[string]struct {
+		reason string
+		args   args
+		want   want
 	}{
-		{
-			name: "Output of Math transform",
-			transform: &Transform{
-				Type: TransformTypeMath,
+		"MapTransform": {
+			reason: "Output of Math transform should be float64",
+			args: args{
+				transform: &Transform{
+					Type: TransformTypeMath,
+				},
 			},
-			want: &[]TransformIOType{TransformIOTypeFloat64}[0],
+			want: want{
+				output: &[]TransformIOType{TransformIOTypeFloat64}[0],
+			},
 		},
-		{
-			name: "Output of Convert transform, no validation",
-			transform: &Transform{
-				Type:    TransformTypeConvert,
-				Convert: &ConvertTransform{ToType: "fakeType"},
+		"ConvertTransform": {
+			reason: "Output of Convert transform, no validation, should be the type specified",
+			args: args{
+				transform: &Transform{
+					Type:    TransformTypeConvert,
+					Convert: &ConvertTransform{ToType: "fakeType"},
+				},
 			},
-			want: &[]TransformIOType{"fakeType"}[0],
+			want: want{
+				output: &[]TransformIOType{"fakeType"}[0],
+			},
 		},
-		{
-			name: "Output of Unknown transform type returns an error",
-			transform: &Transform{
-				Type: "fakeType",
+		"ErrorUnknownType": {
+			reason: "Output of Unknown transform type returns an error",
+			args: args{
+				transform: &Transform{
+					Type: "fakeType",
+				},
 			},
-			wantErr: true,
+			want: want{
+				err: fmt.Errorf("unable to get output type, unknown transform type: fakeType"),
+			},
 		},
-		{
-			name: "Output of Map transform is nil",
-			transform: &Transform{
-				Type: TransformTypeMap,
+		"MapTransformNil": {
+			reason: "Output of Map transform is nil",
+			args: args{
+				transform: &Transform{
+					Type: TransformTypeMap,
+				},
 			},
-			want:    nil,
-			wantErr: false,
 		},
-		{
-			name: "Output of Match transform is nil",
-			transform: &Transform{
-				Type: TransformTypeMatch,
+		"MatchTransformNil": {
+			reason: "Output of Match transform is nil",
+			args: args{
+				transform: &Transform{
+					Type: TransformTypeMatch,
+				},
 			},
-			want:    nil,
-			wantErr: false,
 		},
 	}
-	for _, tt := range tests {
-		t1.Run(tt.name, func(t1 *testing.T) {
-			got, err := tt.transform.GetOutputType()
-			if (err != nil) != tt.wantErr {
-				t1.Errorf("GetOutputType() error = %v, wantErr %v", err, tt.wantErr)
-				return
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			got, err := tc.args.transform.GetOutputType()
+			if diff := cmp.Diff(tc.want.err, err, test.EquateErrors()); diff != "" {
+				t.Errorf("%s\nGetOutputType(...): -want, +got:\n%s", tc.reason, diff)
 			}
-			if diff := cmp.Diff(got, tt.want, cmpopts.EquateEmpty()); diff != "" {
-				t1.Errorf("GetOutputType() -want/+got: %s", diff)
+
+			if diff := cmp.Diff(tc.want.output, got); diff != "" {
+				t.Errorf("%s\nGetOutputType(...): -want, +got:\n%s", tc.reason, diff)
 			}
 		})
 	}
