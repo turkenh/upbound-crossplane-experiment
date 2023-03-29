@@ -40,8 +40,6 @@ const (
 	PatchTypeCombineFromComposite     PatchType = "CombineFromComposite"
 	PatchTypeCombineToComposite       PatchType = "CombineToComposite"
 	PatchTypeCombineToEnvironment     PatchType = "CombineToEnvironment"
-
-	PatchTypeDefault = PatchTypeFromCompositeFieldPath
 )
 
 // A FromFieldPathPolicy determines how to patch from a field path.
@@ -111,7 +109,7 @@ type Patch struct {
 // GetType returns the patch type. If the type is not set, it returns the default type.
 func (p *Patch) GetType() PatchType {
 	if p.Type == "" {
-		return PatchTypeDefault
+		return PatchTypeFromCompositeFieldPath
 	}
 	return p.Type
 }
