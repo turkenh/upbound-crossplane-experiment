@@ -24,9 +24,9 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 
-	xperrors "github.com/crossplane/crossplane/pkg/validation/errors"
-
 	"github.com/crossplane/crossplane-runtime/pkg/errors"
+
+	xperrors "github.com/crossplane/crossplane/pkg/validation/errors"
 )
 
 // TransformType is type of the transform function to be chosen.

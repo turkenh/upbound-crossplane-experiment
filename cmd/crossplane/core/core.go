@@ -20,16 +20,13 @@ package core
 import (
 	"time"
 
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
-
-	"github.com/crossplane/crossplane/pkg/validation/apiextensions/v1/composition"
-
 	"github.com/alecthomas/kong"
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/spf13/afero"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	"github.com/crossplane/crossplane-runtime/pkg/controller"
 	"github.com/crossplane/crossplane-runtime/pkg/errors"
@@ -44,6 +41,7 @@ import (
 	"github.com/crossplane/crossplane/internal/features"
 	"github.com/crossplane/crossplane/internal/transport"
 	"github.com/crossplane/crossplane/internal/xpkg"
+	"github.com/crossplane/crossplane/pkg/validation/apiextensions/v1/composition"
 )
 
 // Command runs the core crossplane controllers

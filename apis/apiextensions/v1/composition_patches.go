@@ -19,11 +19,11 @@ package v1
 import (
 	"fmt"
 
-	"github.com/crossplane/crossplane/pkg/validation/errors"
-
 	"k8s.io/apimachinery/pkg/util/validation/field"
 
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
+
+	"github.com/crossplane/crossplane/pkg/validation/errors"
 )
 
 // A PatchType is a type of patch.

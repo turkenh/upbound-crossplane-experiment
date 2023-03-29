@@ -19,9 +19,9 @@ package v1
 import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 
-	xperrors "github.com/crossplane/crossplane/pkg/validation/errors"
-
 	"github.com/crossplane/crossplane-runtime/pkg/errors"
+
+	xperrors "github.com/crossplane/crossplane/pkg/validation/errors"
 )
 
 // Validate performs logical validation of a Composition.

@@ -19,12 +19,12 @@ package v1
 import (
 	"testing"
 
-	"github.com/crossplane/crossplane/pkg/validation/errors"
-
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/utils/pointer"
+
+	"github.com/crossplane/crossplane/pkg/validation/errors"
 )
 
 func TestComposition_validateResourceName(t *testing.T) {
