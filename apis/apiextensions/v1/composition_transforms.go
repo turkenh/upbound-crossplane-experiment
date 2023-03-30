@@ -34,6 +34,8 @@ type TransformType string
 
 // Accepted TransformTypes.
 const (
+	ErrConvertFormatPairNotSupported = "conversion from %s to %s is not supported with format %s"
+
 	TransformTypeMap     TransformType = "map"
 	TransformTypeMatch   TransformType = "match"
 	TransformTypeMath    TransformType = "math"
@@ -99,10 +101,8 @@ func (t *Transform) Validate() *field.Error {
 		if t.Convert == nil {
 			return field.Required(field.NewPath("convert"), "given transform type convert requires configuration")
 		}
-		if err := t.Convert.Validate(); err != nil {
-			return xperrors.WrapFieldError(err, field.NewPath("convert"))
-		}
 	default:
+		// Should never happen
 		return field.Invalid(field.NewPath("type"), t.Type, "unknown transform type")
 	}
 
@@ -133,7 +133,7 @@ func (t *ConvertTransform) GetConversionFunc(from TransformIOType) (func(any) (a
 	}
 	f, ok := conversions[conversionPair{from: from, to: to, format: t.GetFormat()}]
 	if !ok {
-		return nil, errors.Errorf("conversion from %s to %s is not supported with format %s", originalFrom, to, t.GetFormat())
+		return nil, errors.Errorf(ErrConvertFormatPairNotSupported, originalFrom, to, t.GetFormat())
 	}
 	return f, nil
 }
@@ -399,16 +399,6 @@ const (
 	TransformIOTypeFloat64 TransformIOType = "float64"
 )
 
-// IsValid checks if the given TransformIOType is valid.
-func (c TransformIOType) IsValid() bool {
-	switch c {
-	case TransformIOTypeString, TransformIOTypeBool, TransformIOTypeInt, TransformIOTypeInt64, TransformIOTypeFloat64:
-		return true
-	default:
-		return false
-	}
-}
-
 // ConvertTransformFormat defines the expected format of an input value of a
 // conversion transform.
 type ConvertTransformFormat string
@@ -418,15 +408,6 @@ const (
 	ConvertTransformFormatNone     ConvertTransformFormat = "none"
 	ConvertTransformFormatQuantity ConvertTransformFormat = "quantity"
 )
-
-// IsValid returns true if the format is valid.
-func (c ConvertTransformFormat) IsValid() bool {
-	switch c {
-	case ConvertTransformFormatNone, ConvertTransformFormatQuantity:
-		return true
-	}
-	return false
-}
 
 // A ConvertTransform converts the input into a new object whose type is supplied.
 type ConvertTransform struct {
@@ -444,15 +425,4 @@ type ConvertTransform struct {
 	// +kubebuilder:validation:Enum=none;quantity
 	// +kubebuilder:validation:Default=none
 	Format *ConvertTransformFormat `json:"format,omitempty"`
-}
-
-// Validate returns an error if the ConvertTransform is invalid.
-func (t ConvertTransform) Validate() *field.Error {
-	if !t.GetFormat().IsValid() {
-		return field.Invalid(field.NewPath("format"), t.Format, "invalid format")
-	}
-	if !t.ToType.IsValid() {
-		return field.Invalid(field.NewPath("toType"), t.ToType, "invalid type")
-	}
-	return nil
 }

@@ -55,21 +55,6 @@ func TestReadinessCheck_Validate(t *testing.T) {
 				},
 			},
 		},
-		"InvalidType": {
-			reason: "Invalid type",
-			args: args{
-				r: &ReadinessCheck{
-					Type: "foo",
-				},
-			},
-			want: want{
-				output: &field.Error{
-					Type:     field.ErrorTypeInvalid,
-					Field:    "type",
-					BadValue: "foo",
-				},
-			},
-		},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {

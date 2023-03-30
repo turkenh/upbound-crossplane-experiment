@@ -891,7 +891,7 @@ func TestConvertResolve(t *testing.T) {
 				to: v1.TransformIOTypeString,
 			},
 			want: want{
-				err: errors.Errorf(errFmtConvertInputTypeNotSupported, []int{}),
+				err: errors.Errorf(v1.ErrConvertFormatPairNotSupported, "[]int", "string", string(v1.ConvertTransformFormatNone)),
 			},
 		},
 		"ConversionPairFormatNotSupported": {
@@ -901,7 +901,7 @@ func TestConvertResolve(t *testing.T) {
 				format: (*v1.ConvertTransformFormat)(pointer.String(string(v1.ConvertTransformFormatQuantity))),
 			},
 			want: want{
-				err: errors.Errorf(errConvertFormatPairNotSupported, "int", "string", string(v1.ConvertTransformFormatQuantity)),
+				err: errors.Errorf(v1.ErrConvertFormatPairNotSupported, "int", "string", string(v1.ConvertTransformFormatQuantity)),
 			},
 		},
 		"ConversionPairNotSupported": {
@@ -910,7 +910,16 @@ func TestConvertResolve(t *testing.T) {
 				to: "[]int",
 			},
 			want: want{
-				err: errors.Errorf(errConvertFormatPairNotSupported, "string", "[]int", string(v1.ConvertTransformFormatNone)),
+				err: errors.Errorf(v1.ErrConvertFormatPairNotSupported, "string", "[]int", string(v1.ConvertTransformFormatNone)),
+			},
+		},
+		"ConversionPairSupportedFloat64Int64": {
+			args: args{
+				i:  float64(1.1),
+				to: v1.TransformIOTypeInt64,
+			},
+			want: want{
+				o: int64(1),
 			},
 		},
 	}

@@ -176,40 +176,6 @@ func TestTransform_Validate(t *testing.T) {
 				},
 			},
 		},
-		"InvalidConvertUnknownFormat": {
-			reason: "Convert transform with unknown format should be invalid",
-			args: args{
-				transform: &Transform{
-					Type: TransformTypeConvert,
-					Convert: &ConvertTransform{
-						Format: &[]ConvertTransformFormat{"foo"}[0],
-					},
-				},
-			},
-			want: want{
-				err: &field.Error{
-					Type:  field.ErrorTypeInvalid,
-					Field: "convert.format",
-				},
-			},
-		},
-		"InvalidConvertUnknownToType": {
-			reason: "Convert transform with unknown toType should be invalid",
-			args: args{
-				transform: &Transform{
-					Type: TransformTypeConvert,
-					Convert: &ConvertTransform{
-						ToType: TransformIOType("foo"),
-					},
-				},
-			},
-			want: want{
-				err: &field.Error{
-					Type:  field.ErrorTypeInvalid,
-					Field: "convert.toType",
-				},
-			},
-		},
 		"ValidConvert": {
 			reason: "Convert transform with valid format and toType should be valid",
 			args: args{

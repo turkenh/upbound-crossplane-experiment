@@ -64,9 +64,6 @@ const (
 	errStringTransformTypeRegexpFailed  = "could not compile regexp"
 	errStringTransformTypeRegexpNoMatch = "regexp %q had no matches for group %d"
 	errStringConvertTypeFailed          = "type %s is not supported for string convert"
-	errFmtConvertInputTypeNotSupported  = "invalid input type %T"
-
-	errConvertFormatPairNotSupported = "conversion from %s to %s is not supported with format %s"
 
 	errDecodeString = "string is not valid base64"
 	errMarshalJSON  = "cannot marshal to JSON"
@@ -313,10 +310,7 @@ func stringRegexpTransform(input any, r v1.StringTransformRegexp) (string, error
 // ResolveConvert resolves a Convert transform by looking up the appropriate
 // conversion function for the given input type and invoking it.
 func ResolveConvert(t v1.ConvertTransform, input any) (any, error) {
-	from := v1.TransformIOType(reflect.TypeOf(input).Kind().String())
-	if !from.IsValid() {
-		return nil, errors.Errorf(errFmtConvertInputTypeNotSupported, input)
-	}
+	from := v1.TransformIOType(reflect.TypeOf(input).String())
 	f, err := t.GetConversionFunc(from)
 	if err != nil {
 		return nil, err

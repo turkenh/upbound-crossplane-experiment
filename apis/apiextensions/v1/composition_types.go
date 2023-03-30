@@ -23,8 +23,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/validation/field"
-
-	"github.com/crossplane/crossplane-runtime/pkg/errors"
 )
 
 // CompositionSpec specifies desired state of a composition.
@@ -175,16 +173,6 @@ const (
 	ReadinessCheckTypeNone         ReadinessCheckType = "None"
 )
 
-// IsValid returns nil if the readiness check type is valid, or an error otherwise.
-func (t *ReadinessCheckType) IsValid() error {
-	switch *t {
-	case ReadinessCheckTypeNonEmpty, ReadinessCheckTypeMatchString, ReadinessCheckTypeMatchInteger, ReadinessCheckTypeNone:
-		return nil
-	default:
-		return errors.Errorf("invalid readiness check type %q", *t)
-	}
-}
-
 // ReadinessCheck is used to indicate how to tell whether a resource is ready
 // for consumption
 type ReadinessCheck struct {
@@ -211,9 +199,6 @@ type ReadinessCheck struct {
 
 // Validate checks if the readiness check is logically valid.
 func (r *ReadinessCheck) Validate() *field.Error {
-	if r.Type.IsValid() != nil {
-		return field.Invalid(field.NewPath("type"), string(r.Type), "invalid readiness check type")
-	}
 	switch r.Type {
 	case ReadinessCheckTypeNone:
 		return nil
@@ -228,7 +213,10 @@ func (r *ReadinessCheck) Validate() *field.Error {
 			return field.Required(field.NewPath("matchInteger"), "cannot be 0 for type MatchInteger")
 		}
 	case ReadinessCheckTypeNonEmpty:
-		// No specific validation required.
+	// No specific validation required.
+	default:
+		// Should never happen
+		return field.Required(field.NewPath("type"), "Unknown readiness check type")
 	}
 	if r.FieldPath == "" {
 		return field.Required(field.NewPath("fieldPath"), "cannot be empty")
