@@ -59,11 +59,7 @@ func TestReadinessCheck_Validate(t *testing.T) {
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			got := tc.args.r.Validate()
-			if diff := cmp.Diff(
-				tc.want.output,
-				got,
-				cmpopts.IgnoreFields(field.Error{}, "Detail", "BadValue"),
-			); diff != "" {
+			if diff := cmp.Diff(tc.want.output, got, cmpopts.IgnoreFields(field.Error{}, "Detail", "BadValue")); diff != "" {
 				t.Errorf("%s\nValidate(...): -want, +got:\n%s", tc.reason, diff)
 			}
 		})
