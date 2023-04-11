@@ -24,7 +24,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/utils/pointer"
-	"k8s.io/utils/strings/slices"
 
 	"github.com/crossplane/crossplane-runtime/pkg/errors"
 	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
@@ -156,42 +155,23 @@ func (v *Validator) validatePatchWithSchemas( //nolint:gocyclo // TODO(phisco): 
 }
 
 // ValidateCombineFromCompositePathPatch validates Combine Patch types, by going through and validating the fromField
-// path variables, checking if they all need to be required, checking if the right combine strategy is set and
-// validating transforms.
-//
-//nolint:gocyclo // TODO(phico): there is not much we can refactor here
+// path variables, checking if the right combine strategy is set and validating transforms.
 func ValidateCombineFromCompositePathPatch(
 	patch v1.Patch,
 	from *apiextensions.JSONSchemaProps,
 	to *apiextensions.JSONSchemaProps,
 ) (fromType, toType xpschema.KnownJSONType, err *field.Error) {
 	toFieldPath := patch.GetToFieldPath()
-	toType, toRequired, toFieldPathErr := validateFieldPath(to, toFieldPath)
+	toType, toFieldPathErr := validateFieldPath(to, toFieldPath)
 	if toFieldPathErr != nil {
 		return "", "", field.Invalid(field.NewPath("toFieldPath"), toFieldPath, toFieldPathErr.Error())
 	}
 	errs := field.ErrorList{}
 	for _, variable := range patch.Combine.Variables {
 		fromFieldPath := variable.FromFieldPath
-		_, fromRequired, err := validateFieldPath(from, fromFieldPath)
+		_, err := validateFieldPath(from, fromFieldPath)
 		if err != nil {
 			errs = append(errs, field.Invalid(field.NewPath("fromFieldPath"), fromFieldPath, err.Error()))
-			continue
-		}
-
-		if patch.Policy.GetFromFieldPathPolicy() == v1.FromFieldPathPolicyRequired && !fromRequired {
-			return "", "", field.Invalid(
-				field.NewPath("policy", "fromFieldPath"),
-				patch.Policy.FromFieldPath,
-				"fromFieldPath is required according to the schema, but policy is set to optional",
-			)
-		}
-		if toRequired && !fromRequired {
-			errs = append(errs, field.Invalid(
-				field.NewPath("combine"),
-				patch.Combine.Variables,
-				fmt.Sprintf("fromFieldPath (%v) is not fromRequired but toFieldPath (%s) is, this could lead to unexpected runtime errors", patch.Combine.Variables, toFieldPath),
-			))
 			continue
 		}
 	}
@@ -222,28 +202,14 @@ func ValidateFromCompositeFieldPathPatch(
 ) (fromType, toType xpschema.KnownJSONType, res *field.Error) {
 	fromFieldPath := patch.GetFromFieldPath()
 	toFieldPath := patch.GetToFieldPath()
-	fromType, fromRequired, err := validateFieldPath(from, fromFieldPath)
+	fromType, err := validateFieldPath(from, fromFieldPath)
 	if err != nil {
 		return "", "", field.Invalid(field.NewPath("fromFieldPath"), fromFieldPath, err.Error())
 	}
 
-	if patch.Policy.GetFromFieldPathPolicy() == v1.FromFieldPathPolicyRequired && !fromRequired {
-		return "", "", field.Invalid(
-			field.NewPath("policy", "fromFieldPath"),
-			patch.Policy.FromFieldPath,
-			"fromFieldPath policy is set to Required, but it is not required according to the source's schema, this could lead to runtime errors",
-		)
-	}
-
-	toType, toRequired, err := validateFieldPath(to, toFieldPath)
+	toType, err = validateFieldPath(to, toFieldPath)
 	if err != nil {
 		return "", "", field.Invalid(field.NewPath("toFieldPath"), toFieldPath, err.Error())
-	}
-	if toRequired && !fromRequired {
-		return "", "", field.Invalid(field.NewPath("fromFieldPath"), fromFieldPath, fmt.Sprintf(
-			"fromFieldPath is optional by the source's schema, but toFieldPath '%s' is required by the destination's schemas, this could lead to runtime errors",
-			toFieldPath,
-		))
 	}
 
 	return fromType, toType, nil
@@ -289,45 +255,41 @@ func validateIOTypesWithTransforms(transforms []v1.Transform, fromType, toType x
 }
 
 // validateFieldPath validates the given fieldPath is valid for the given schema.
-// It returns the type of the fieldPath and whether it is required, or any error.
+// It returns the type of the fieldPath and any error.
 // If the returned type is "", but without error, it means the fieldPath is accepted by the schema, but not defined in it.
-func validateFieldPath(schema *apiextensions.JSONSchemaProps, fieldPath string) (fieldType xpschema.KnownJSONType, required bool, err error) {
+func validateFieldPath(schema *apiextensions.JSONSchemaProps, fieldPath string) (fieldType xpschema.KnownJSONType, err error) {
 	if fieldPath == "" {
-		return "", false, nil
+		return "", nil
 	}
 	segments, err := fieldpath.Parse(fieldPath)
 	if err != nil {
-		return "", false, err
+		return "", err
 	}
 	if len(segments) > 0 && segments[0].Type == fieldpath.SegmentField && segments[0].Field == "metadata" &&
 		isMissingMetadataSchema(schema) {
 		segments = segments[1:]
 		schema = &metadataSchema
 	}
-	if len(segments) > 0 {
-		required = true
-	}
-	return validateFieldPathSegments(segments, schema, required, fieldPath)
+	return validateFieldPathSegments(segments, schema, fieldPath)
 }
 
-func validateFieldPathSegments(segments fieldpath.Segments, schema *apiextensions.JSONSchemaProps, required bool, fieldPath string) (xpschema.KnownJSONType, bool, error) {
+func validateFieldPathSegments(segments fieldpath.Segments, schema *apiextensions.JSONSchemaProps, fieldPath string) (xpschema.KnownJSONType, error) {
 	current := schema
 	for _, segment := range segments {
-		currentSegment, segmentRequired, err := validateFieldPathSegment(current, segment)
+		currentSegment, err := validateFieldPathSegment(current, segment)
 		if err != nil {
-			return "", false, err
+			return "", err
 		}
 		if currentSegment == nil {
-			return "", false, nil
+			return "", nil
 		}
 		current = currentSegment
-		required = required && segmentRequired
 	}
 
 	if !xpschema.IsKnownJSONType(current.Type) {
-		return "", false, fmt.Errorf("field path %q has an unsupported type %q", fieldPath, current.Type)
+		return "", fmt.Errorf("field path %q has an unsupported type %q", fieldPath, current.Type)
 	}
-	return xpschema.KnownJSONType(current.Type), required, nil
+	return xpschema.KnownJSONType(current.Type), nil
 }
 
 func isMissingMetadataSchema(schema *apiextensions.JSONSchemaProps) bool {
@@ -342,68 +304,66 @@ func isMissingMetadataSchema(schema *apiextensions.JSONSchemaProps) bool {
 }
 
 // validateFieldPathSegment validates that the given field path segment is valid for the given schema.
-// It returns the schema for the segment, whether the segment is required, and an error if the segment is invalid.
-// It returns the schema for the segment, whether the segment is wantRequired, and an error if the segment is invalid.
-func validateFieldPathSegment(parent *apiextensions.JSONSchemaProps, segment fieldpath.Segment) (current *apiextensions.JSONSchemaProps, required bool, err error) {
+// It returns the schema for the segment, and an error if the segment is invalid.
+func validateFieldPathSegment(parent *apiextensions.JSONSchemaProps, segment fieldpath.Segment) (current *apiextensions.JSONSchemaProps, err error) {
 	switch segment.Type {
 	case fieldpath.SegmentField:
 		return validateFieldPathSegmentField(parent, segment)
 	case fieldpath.SegmentIndex:
 		return validateFieldPathSegmentIndex(parent, segment)
 	}
-	return nil, false, nil
+	return nil, nil
 }
 
-func validateFieldPathSegmentField(parent *apiextensions.JSONSchemaProps, segment fieldpath.Segment) (*apiextensions.JSONSchemaProps, bool, error) {
+func validateFieldPathSegmentField(parent *apiextensions.JSONSchemaProps, segment fieldpath.Segment) (*apiextensions.JSONSchemaProps, error) {
 	if parent == nil {
-		return nil, false, nil
+		return nil, nil
 	}
 	if segment.Type != fieldpath.SegmentField {
-		return nil, false, errors.Errorf("segment is not a field")
+		return nil, errors.Errorf("segment is not a field")
 	}
 	if propType := parent.Type; propType != "" && propType != string(xpschema.KnownJSONTypeObject) {
-		return nil, false, errors.Errorf(errFmtFieldAccessWrongType, segment.Field, propType)
+		return nil, errors.Errorf(errFmtFieldAccessWrongType, segment.Field, propType)
 	}
 	// TODO(phisco): any remaining fields? e.g. XValidations' CEL Rules?
 	prop, exists := parent.Properties[segment.Field]
 	if !exists {
 		if pointer.BoolDeref(parent.XPreserveUnknownFields, false) {
-			return nil, false, nil
+			return nil, nil
 		}
 		if parent.AdditionalProperties != nil && parent.AdditionalProperties.Allows {
-			return parent.AdditionalProperties.Schema, false, nil
+			return parent.AdditionalProperties.Schema, nil
 		}
-		return nil, false, errors.Errorf(errFmtFieldInvalid, segment.Field)
+		return nil, errors.Errorf(errFmtFieldInvalid, segment.Field)
 	}
-	return &prop, slices.Contains(parent.Required, segment.Field), nil
+	return &prop, nil
 }
 
-func validateFieldPathSegmentIndex(parent *apiextensions.JSONSchemaProps, segment fieldpath.Segment) (*apiextensions.JSONSchemaProps, bool, error) {
+func validateFieldPathSegmentIndex(parent *apiextensions.JSONSchemaProps, segment fieldpath.Segment) (*apiextensions.JSONSchemaProps, error) {
 	if parent == nil {
-		return nil, false, nil
+		return nil, nil
 	}
 	if segment.Type != fieldpath.SegmentIndex {
-		return nil, false, errors.Errorf("segment is not an index")
+		return nil, errors.Errorf("segment is not an index")
 	}
 	if parent.Type != string(xpschema.KnownJSONTypeArray) {
-		return nil, false, errors.Errorf(errFmtIndexAccessWrongType, parent.Type)
+		return nil, errors.Errorf(errFmtIndexAccessWrongType, parent.Type)
 	}
 	if parent.Items == nil {
-		return nil, false, errors.New("no items found in array")
+		return nil, errors.New("no items found in array")
 	}
 	// if there is a limit on max items and the index is above that, return an error
 	if parent.MaxItems != nil && *parent.MaxItems < int64(segment.Index+1) {
-		return nil, false, errors.Errorf(errFmtArrayIndexAboveMax, segment.Index, *parent.MaxItems-1)
+		return nil, errors.Errorf(errFmtArrayIndexAboveMax, segment.Index, *parent.MaxItems-1)
 	}
 	if s := parent.Items.Schema; s != nil {
-		// return required true if the array has a schema and a minimum size
-		return s, parent.MinItems != nil && *parent.MinItems > int64(segment.Index), nil
+		return s, nil
 	}
 	schemas := parent.Items.JSONSchemas
 	if len(schemas) < int(segment.Index) {
-		return nil, false, errors.Errorf("no schemas ")
+		return nil, errors.Errorf("no schema for item requested at index %d", segment.Index)
 	}
 
 	// means there is no schema at all for this array
-	return nil, false, nil
+	return nil, nil
 }

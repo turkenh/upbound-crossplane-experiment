@@ -328,7 +328,6 @@ func Test_validateFieldPath(t *testing.T) {
 	type want struct {
 		err       error
 		fieldType schema.KnownJSONType
-		required  bool
 	}
 	cases := map[string]struct {
 		reason string
@@ -337,43 +336,12 @@ func Test_validateFieldPath(t *testing.T) {
 	}{
 		"AcceptValidFieldPath": {
 			reason: "Should validate a valid field path",
-			want:   want{err: nil, fieldType: "string", required: false},
+			want:   want{err: nil, fieldType: "string"},
 			args: args{
 				fieldPath: "spec.forProvider.foo",
 				schema: &apiextensions.JSONSchemaProps{
 					Properties: map[string]apiextensions.JSONSchemaProps{
 						"spec": {
-							Properties: map[string]apiextensions.JSONSchemaProps{
-								"forProvider": {
-									Properties: map[string]apiextensions.JSONSchemaProps{
-										"foo": {Type: "string"}}}}}}}},
-		},
-		"AcceptValidFieldPathWithRequiredChain": {
-			reason: "Should validate a valid field path with a field required the whole chain",
-			want:   want{err: nil, fieldType: "string", required: true},
-			args: args{
-				fieldPath: "spec.forProvider.foo",
-				schema: &apiextensions.JSONSchemaProps{
-					Required: []string{"spec"},
-					Properties: map[string]apiextensions.JSONSchemaProps{
-						"spec": {
-							Required: []string{"forProvider"},
-							Properties: map[string]apiextensions.JSONSchemaProps{
-								"forProvider": {
-									Required: []string{"foo"},
-									Properties: map[string]apiextensions.JSONSchemaProps{
-										"foo": {Type: "string"}}}}}}}},
-		},
-		"AcceptValidFieldPathWithRequiredFieldNotWholeChain": {
-			reason: "Should not return that a field is required if it is not the whole chain",
-			want:   want{err: nil, fieldType: "string", required: false},
-			args: args{
-				fieldPath: "spec.forProvider.foo",
-				schema: &apiextensions.JSONSchemaProps{
-					Required: []string{"spec"},
-					Properties: map[string]apiextensions.JSONSchemaProps{
-						"spec": {
-							Required: []string{"forProvider"},
 							Properties: map[string]apiextensions.JSONSchemaProps{
 								"forProvider": {
 									Properties: map[string]apiextensions.JSONSchemaProps{
@@ -392,9 +360,9 @@ func Test_validateFieldPath(t *testing.T) {
 									Properties: map[string]apiextensions.JSONSchemaProps{
 										"foo": {Type: "string"}}}}}}}},
 		},
-		"AcceptFieldPathXPreserveUnkownFields": {
+		"AcceptFieldPathXPreserveUnknownFields": {
 			reason: "Should not return an error for an undefined but accepted field path",
-			want:   want{err: nil, fieldType: "", required: false},
+			want:   want{err: nil, fieldType: ""},
 			args: args{
 				fieldPath: "spec.forProvider.wrong",
 				schema: &apiextensions.JSONSchemaProps{
@@ -409,7 +377,7 @@ func Test_validateFieldPath(t *testing.T) {
 		},
 		"AcceptValidArray": {
 			reason: "Should validate arrays properly",
-			want:   want{err: nil, fieldType: "string", required: false},
+			want:   want{err: nil, fieldType: "string"},
 			args: args{
 				fieldPath: "spec.forProvider.foo[0].bar",
 				schema: &apiextensions.JSONSchemaProps{
@@ -425,75 +393,9 @@ func Test_validateFieldPath(t *testing.T) {
 													Properties: map[string]apiextensions.JSONSchemaProps{
 														"bar": {Type: "string"}}}}}}}}}}}},
 		},
-		"AcceptMinItems1NotRequired": {
-			reason: "Should validate arrays properly with a field not required the whole chain, minimum length 1",
-			want:   want{err: nil, fieldType: "string", required: false},
-			args: args{
-				fieldPath: "spec.forProvider.foo[1].bar",
-				schema: &apiextensions.JSONSchemaProps{
-					Properties: map[string]apiextensions.JSONSchemaProps{
-						"spec": {
-							Properties: map[string]apiextensions.JSONSchemaProps{
-								"forProvider": {
-									Properties: map[string]apiextensions.JSONSchemaProps{
-										"foo": {
-											Type:     "array",
-											MinItems: &[]int64{1}[0],
-											Items: &apiextensions.JSONSchemaPropsOrArray{
-												Schema: &apiextensions.JSONSchemaProps{
-													Required: []string{"bar"},
-													Properties: map[string]apiextensions.JSONSchemaProps{
-														"bar": {Type: "string"}}}}}}}}}}}},
-		},
-		"AcceptRequiredInMinItemsRange": {
-			reason: "Should validate arrays properly with a field required the whole chain, accessing in min items range",
-			want:   want{err: nil, fieldType: "string", required: true},
-			args: args{
-				fieldPath: "spec.forProvider.foo[1].bar",
-				schema: &apiextensions.JSONSchemaProps{
-					Required: []string{"spec"},
-					Properties: map[string]apiextensions.JSONSchemaProps{
-						"spec": {
-							Required: []string{"forProvider"},
-							Properties: map[string]apiextensions.JSONSchemaProps{
-								"forProvider": {
-									Required: []string{"foo"},
-									Properties: map[string]apiextensions.JSONSchemaProps{
-										"foo": {
-											Type:     "array",
-											MinItems: &[]int64{2}[0],
-											Items: &apiextensions.JSONSchemaPropsOrArray{
-												Schema: &apiextensions.JSONSchemaProps{
-													Required: []string{"bar"},
-													Properties: map[string]apiextensions.JSONSchemaProps{
-														"bar": {Type: "string"}}}}}}}}}}}},
-		},
-		"AcceptRequiredAboveMinItemsRange": {
-			reason: "Should validate arrays properly with a field required the whole chain, accessing above min items range",
-			want:   want{err: nil, fieldType: "string", required: false},
-			args: args{
-				fieldPath: "spec.forProvider.foo[10].bar",
-				schema: &apiextensions.JSONSchemaProps{
-					Required: []string{"spec"},
-					Properties: map[string]apiextensions.JSONSchemaProps{
-						"spec": {
-							Required: []string{"forProvider"},
-							Properties: map[string]apiextensions.JSONSchemaProps{
-								"forProvider": {
-									Required: []string{"foo"},
-									Properties: map[string]apiextensions.JSONSchemaProps{
-										"foo": {
-											Type:     "array",
-											MinItems: &[]int64{2}[0],
-											Items: &apiextensions.JSONSchemaPropsOrArray{
-												Schema: &apiextensions.JSONSchemaProps{
-													Required: []string{"bar"},
-													Properties: map[string]apiextensions.JSONSchemaProps{
-														"bar": {Type: "string"}}}}}}}}}}}},
-		},
 		"AcceptComplexSchema": {
 			reason: "Should validate properly with complex schema",
-			want:   want{err: nil, fieldType: "string", required: false},
+			want:   want{err: nil, fieldType: "string"},
 			args: args{
 				fieldPath: "spec.forProvider.clientIDList[0]",
 				// parse the schema from json
@@ -511,7 +413,7 @@ func Test_validateFieldPath(t *testing.T) {
 		},
 		"AcceptBelowMinItemsRequiredChain": {
 			reason: "Should accept if below min items, and mark as required if the whole chain is required",
-			want:   want{err: nil, fieldType: "string", required: true},
+			want:   want{err: nil, fieldType: "string"},
 			args: args{
 				fieldPath: "spec.forProvider.thumbprintList[0]",
 				// parse the schema from json
@@ -521,15 +423,12 @@ func Test_validateFieldPath(t *testing.T) {
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			gotFieldType, gotRequired, err := validateFieldPath(tc.args.schema, tc.args.fieldPath)
+			gotFieldType, err := validateFieldPath(tc.args.schema, tc.args.fieldPath)
 			if diff := cmp.Diff(tc.want.err, err, test.EquateErrors()); diff != "" {
 				t.Errorf("\n%s\nvalidateFieldPath(...): -want error, +got error: %s\n", tc.reason, diff)
 				return
 			}
 			if diff := cmp.Diff(tc.want.fieldType, gotFieldType); diff != "" {
-				t.Errorf("\n%s\nvalidateFieldPath(...): -want, +got: %s\n", tc.reason, diff)
-			}
-			if diff := cmp.Diff(tc.want.required, gotRequired); diff != "" {
 				t.Errorf("\n%s\nvalidateFieldPath(...): -want, +got: %s\n", tc.reason, diff)
 			}
 		})
@@ -542,8 +441,7 @@ func Test_validateFieldPathSegmentIndex(t *testing.T) {
 		segment fieldpath.Segment
 	}
 	type want struct {
-		err      error
-		required bool
+		err error
 	}
 	cases := map[string]struct {
 		name string
@@ -561,7 +459,7 @@ func Test_validateFieldPathSegmentIndex(t *testing.T) {
 					Index: 1,
 				},
 			},
-			want: want{err: xperrors.Errorf(errFmtIndexAccessWrongType, "string"), required: false},
+			want: want{err: xperrors.Errorf(errFmtIndexAccessWrongType, "string")},
 		},
 		"AcceptParentArray": {
 			name: "Should return no error if the parent is an array",
@@ -579,7 +477,7 @@ func Test_validateFieldPathSegmentIndex(t *testing.T) {
 					Index: 1,
 				},
 			},
-			want: want{err: nil, required: false},
+			want: want{err: nil},
 		},
 		"AcceptMinSizeArrayBelowRequired": {
 			name: "Should return no error and required if the parent is an array, accessing element below min size",
@@ -598,7 +496,7 @@ func Test_validateFieldPathSegmentIndex(t *testing.T) {
 					Index: 1,
 				},
 			},
-			want: want{err: nil, required: true},
+			want: want{err: nil},
 		},
 		"AcceptMinSizeArrayAboveNotRequired": {
 			name: "Should return no error and not required if the parent is an array, accessing element above min size",
@@ -617,7 +515,7 @@ func Test_validateFieldPathSegmentIndex(t *testing.T) {
 					Index: 3,
 				},
 			},
-			want: want{err: nil, required: false},
+			want: want{err: nil},
 		},
 		"AcceptIndex0MinSize1": {
 			name: "Should return no error and required if the parent is an array with min size 1 and the index is 0",
@@ -636,7 +534,7 @@ func Test_validateFieldPathSegmentIndex(t *testing.T) {
 					Index: 0,
 				},
 			},
-			want: want{err: nil, required: true},
+			want: want{err: nil},
 		},
 		"RejectAboveMaxIndex": {
 			name: "Should return an error if accessing an index that is above the max items",
@@ -655,7 +553,7 @@ func Test_validateFieldPathSegmentIndex(t *testing.T) {
 					Index: 1,
 				},
 			},
-			want: want{err: xperrors.Errorf(errFmtArrayIndexAboveMax, 1, 0), required: false},
+			want: want{err: xperrors.Errorf(errFmtArrayIndexAboveMax, 1, 0)},
 		},
 		"AcceptBelowMaxIndex": {
 			name: "Should return no error if accessing an index that is below the max items",
@@ -678,11 +576,8 @@ func Test_validateFieldPathSegmentIndex(t *testing.T) {
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			_, required, err := validateFieldPathSegmentIndex(tc.args.parent, tc.args.segment)
+			_, err := validateFieldPathSegmentIndex(tc.args.parent, tc.args.segment)
 			if diff := cmp.Diff(tc.want.err, err, test.EquateErrors()); diff != "" {
-				t.Errorf("\n%s\nvalidateFieldPathSegmentIndex(...): -want, +got: %s\n", tc.name, diff)
-			}
-			if diff := cmp.Diff(tc.want.required, required); diff != "" {
 				t.Errorf("\n%s\nvalidateFieldPathSegmentIndex(...): -want, +got: %s\n", tc.name, diff)
 			}
 		})
@@ -695,8 +590,7 @@ func Test_validateFieldPathSegmentField(t *testing.T) {
 		segment fieldpath.Segment
 	}
 	type want struct {
-		err      error
-		required bool
+		err error
 	}
 	cases := map[string]struct {
 		name string
@@ -714,7 +608,7 @@ func Test_validateFieldPathSegmentField(t *testing.T) {
 					Field: "foo",
 				},
 			},
-			want: want{err: xperrors.Errorf(errFmtFieldAccessWrongType, "foo", "string"), required: false},
+			want: want{err: xperrors.Errorf(errFmtFieldAccessWrongType, "foo", "string")},
 		},
 		"AcceptFieldNotPresent": {
 			name: "Should return no error if the parent is an object and the field is present",
@@ -732,26 +626,7 @@ func Test_validateFieldPathSegmentField(t *testing.T) {
 					Field: "foo",
 				},
 			},
-			want: want{err: nil, required: false},
-		},
-		"AcceptFieldNotPresentRequired": {
-			name: "Should return no error if the parent is an object and the field is present and required",
-			args: args{
-				parent: &apiextensions.JSONSchemaProps{
-					Type:     "object",
-					Required: []string{"foo"},
-					Properties: map[string]apiextensions.JSONSchemaProps{
-						"foo": {
-							Type: "string",
-						},
-					},
-				},
-				segment: fieldpath.Segment{
-					Type:  fieldpath.SegmentField,
-					Field: "foo",
-				},
-			},
-			want: want{err: nil, required: true},
+			want: want{err: nil},
 		},
 		"AcceptFieldNotPresentWithXPreserveUnknownFields": {
 			name: "Should return no error with XPreserveUnknownFields accessing a missing field",
@@ -770,7 +645,7 @@ func Test_validateFieldPathSegmentField(t *testing.T) {
 					Field: "bar",
 				},
 			},
-			want: want{err: nil, required: false},
+			want: want{err: nil},
 		},
 		"AcceptFieldPresentWithXPreserveUnknownFieldsRequired": {
 			name: "Should return no error with XPreserveUnknownFields, but required if a known required field is accessed",
@@ -790,7 +665,7 @@ func Test_validateFieldPathSegmentField(t *testing.T) {
 					Field: "foo",
 				},
 			},
-			want: want{err: nil, required: true},
+			want: want{err: nil},
 		},
 		"AcceptFieldNotPresentWithAdditionalProperties": {
 			name: "Should return no error with AdditionalProperties accessing a missing field",
@@ -809,16 +684,13 @@ func Test_validateFieldPathSegmentField(t *testing.T) {
 					Field: "bar",
 				},
 			},
-			want: want{err: nil, required: false},
+			want: want{err: nil},
 		},
 	}
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
-			_, required, err := validateFieldPathSegmentField(tt.args.parent, tt.args.segment)
+			_, err := validateFieldPathSegmentField(tt.args.parent, tt.args.segment)
 			if diff := cmp.Diff(tt.want.err, err, test.EquateErrors()); diff != "" {
-				t.Errorf("\n%s\nvalidateFieldPathSegmentField(...): -want, +got: %s\n", tt.name, diff)
-			}
-			if diff := cmp.Diff(tt.want.required, required); diff != "" {
 				t.Errorf("\n%s\nvalidateFieldPathSegmentField(...): -want, +got: %s\n", tt.name, diff)
 			}
 		})

@@ -241,46 +241,6 @@ func TestValidator_Validate(t *testing.T) {
 				})),
 			},
 		},
-		"RejectStrictPatchWithCombinePatchMissingRequiredField": {
-			reason: "Should reject a Composition with a combine patch with mismatched required fields, if all CRDs are found",
-			want: want{
-				errs: field.ErrorList{
-					{
-						Type:  field.ErrorTypeInvalid,
-						Field: "spec.resources[0].patches[0].combine",
-					},
-				},
-			},
-			args: args{
-				gvkToCRDs: buildGvkToCRDs(
-					defaultCompositeCrdBuilder().withOption(func(crd *extv1.CustomResourceDefinition) {
-						spec := crd.Spec.Versions[0].Schema.OpenAPIV3Schema.Properties["spec"]
-						spec.Properties["someNonReqField"] = extv1.JSONSchemaProps{
-							Type: "string",
-						}
-					}).build(),
-					defaultManagedCrdBuilder().build(),
-				),
-				comp: buildDefaultComposition(t, v1.CompositionValidationModeLoose, nil, withPatches(0, v1.Patch{
-					Type: v1.PatchTypeCombineFromComposite,
-					Combine: &v1.Combine{
-						Variables: []v1.CombineVariable{
-							{
-								FromFieldPath: "spec.someField",
-							},
-							{
-								FromFieldPath: "spec.someNonReqField",
-							},
-						},
-						Strategy: v1.CombineStrategyString,
-						String: &v1.StringCombine{
-							Format: "%s-%s",
-						},
-					},
-					ToFieldPath: pointer.String("spec.someOtherField"),
-				})),
-			},
-		},
 		"RejectStrictPatchWithCombinePatchMissingField": {
 			reason: "Should reject a Composition with a combine patch with missing fields, if validation mode is strict and all CRDs are found",
 			want: want{
