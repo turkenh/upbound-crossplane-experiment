@@ -27,6 +27,8 @@ const (
 // type is an integer and the second is a number. This is because the JSON
 // schema spec allows integers to be used in place of numbers.
 func (t KnownJSONType) IsEquivalent(t2 KnownJSONType) bool {
+	// integer is a subset of number per JSON specification:
+	// https://datatracker.ietf.org/doc/html/draft-zyp-json-schema-04#section-3.5
 	return t == t2 || (t == KnownJSONTypeInteger && t2 == KnownJSONTypeNumber)
 }
 

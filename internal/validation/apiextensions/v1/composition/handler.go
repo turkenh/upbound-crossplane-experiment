@@ -120,8 +120,6 @@ func validationResponseFromStatus(allowed bool, status metav1.Status) admission.
 }
 
 // Validate validates the Composition by rendering it and then validating the rendered resources.
-//
-//nolint:gocyclo //TODO(phisco): refactor if possible
 func (h *handler) Validate(ctx context.Context, comp *v1.Composition) (warns []string, err error) {
 	// Validate the composition itself, we'll disable it on the Validator below
 	var validationErrs field.ErrorList
@@ -142,27 +140,11 @@ func (h *handler) Validate(ctx context.Context, comp *v1.Composition) (warns []s
 
 	// Get all the needed CRDs, Composite Resource, Managed resources ... ? Error out if missing in strict mode
 	gvkToCRD, errs := h.getNeededCRDs(ctx, comp)
-	var shouldSkip bool
-	for _, err := range errs {
-		if err == nil {
-			continue
-		}
-		// If any of the errors is not a NotFound error, error out
-		if !apierrors.IsNotFound(err) {
-			return warns, xperrors.Errorf("there were some errors while getting the needed CRDs: %v", errs)
-		}
-		// If any of the needed CRDs is not found, error out if strict mode is enabled
-		switch validationMode {
-		case v1.CompositionValidationModeStrict:
-			return warns, xperrors.Wrap(err, "cannot get needed CRDs and strict mode is enabled")
-		case v1.CompositionValidationModeLoose:
-			// Given that some requirement is missing, and we are in loose mode, skip validation
-			shouldSkip = true
-			warns = append(warns, fmt.Sprintf("cannot get needed CRDs and loose mode is enabled: %v", err))
-			continue
-		}
+	shouldSkip, w, err := checkErrsWithValidationMode(errs, validationMode)
+	warns = append(warns, w...)
+	if err != nil {
+		return warns, err
 	}
-
 	if shouldSkip {
 		return warns, nil
 	}
@@ -181,6 +163,29 @@ func (h *handler) Validate(ctx context.Context, comp *v1.Composition) (warns []s
 		return warns, apierrors.NewInvalid(comp.GroupVersionKind().GroupKind(), comp.GetName(), errList)
 	}
 	return warns, nil
+}
+
+func checkErrsWithValidationMode(errs []error, validationMode v1.CompositionValidationMode) (shouldSkip bool, warns []string, err error) {
+	for _, err := range errs {
+		if err == nil {
+			continue
+		}
+		// If any of the errors is not a NotFound error, error out
+		if !apierrors.IsNotFound(err) {
+			return false, warns, xperrors.Errorf("there were some errors while getting the needed CRDs: %v", errs)
+		}
+		// If any of the needed CRDs is not found, error out if strict mode is enabled
+		switch validationMode {
+		case v1.CompositionValidationModeStrict:
+			return false, warns, xperrors.Wrap(err, "cannot get needed CRDs and strict mode is enabled")
+		case v1.CompositionValidationModeLoose:
+			// Given that some requirement is missing, and we are in loose mode, skip validation
+			shouldSkip = true
+			warns = append(warns, fmt.Sprintf("cannot get needed CRDs and loose mode is enabled: %v", err))
+			continue
+		}
+	}
+	return shouldSkip, warns, nil
 }
 
 func (h *handler) getNeededCRDs(ctx context.Context, comp *v1.Composition) (map[schema.GroupVersionKind]apiextensions.CustomResourceDefinition, []error) {

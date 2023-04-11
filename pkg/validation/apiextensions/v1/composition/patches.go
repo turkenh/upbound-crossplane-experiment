@@ -75,7 +75,7 @@ func getSchemaForVersion(crd *apiextensions.CustomResourceDefinition, version st
 }
 
 // validatePatchWithSchemas validates a patch against the resources schemas.
-func (v *Validator) validatePatchWithSchemas( //nolint:gocyclo // TODO(phisco): refactor
+func (v *Validator) validatePatchWithSchemas( //nolint:gocyclo // mainly due to the switch, not much to refactor
 	ctx context.Context,
 	comp *v1.Composition,
 	resourceNumber, patchNumber int,
@@ -215,43 +215,48 @@ func ValidateFromCompositeFieldPathPatch(
 	return fromType, toType, nil
 }
 
-//nolint:gocyclo // TODO(phico): there is not much we can refactor here
 func validateIOTypesWithTransforms(transforms []v1.Transform, fromType, toType xpschema.KnownJSONType) *field.Error {
-	transformedToType, err := v1.FromKnownJSONType(fromType)
+	inputType, err := v1.FromKnownJSONType(fromType)
 	if err != nil && fromType != "" {
 		return field.InternalError(field.NewPath("transforms"), err)
 	}
+	transformsOutputType, fieldErr := validateTransformsChainIOTypes(transforms, inputType)
+	if fieldErr != nil {
+		return fieldErr
+	}
+	if transformsOutputType == "" || toType == "" {
+		return nil
+	}
+	transformedToJSONType := inputType.ToKnownJSONType()
+
+	if !transformedToJSONType.IsEquivalent(toType) {
+		if len(transforms) == 0 {
+			return field.Required(field.NewPath("transforms"), fmt.Sprintf("the fromFieldPath does not have a type compatible with the fromFieldPath according to their schemas and no transforms were provided: %s != %s", inputType, toType))
+		}
+		return field.Invalid(field.NewPath("transforms"), transforms, fmt.Sprintf("the provided transforms do not output a type compatible with the toFieldPath according to the schema: %s != %s", inputType, toType))
+	}
+
+	return nil
+}
+
+func validateTransformsChainIOTypes(transforms []v1.Transform, inputType v1.TransformIOType) (outputType v1.TransformIOType, err *field.Error) {
 	for i, transform := range transforms {
-		err := transform.IsValidInput(transformedToType)
-		if err != nil && transformedToType != "" {
-			return field.Invalid(field.NewPath("transforms").Index(i), transform, err.Error())
+		err := transform.IsValidInput(inputType)
+		if err != nil && inputType != "" {
+			return "", field.Invalid(field.NewPath("transforms").Index(i), transform, err.Error())
 		}
 		out, err := transform.GetOutputType()
 		if err != nil {
-			return field.InternalError(field.NewPath("transforms").Index(i), err)
+			return "", field.InternalError(field.NewPath("transforms").Index(i), err)
 		}
 		if out == nil {
 			// no need to validate the rest of the transforms as a nil output without error means we don't
 			// have a way to know the output type for some transforms
-			return nil
+			return "", nil
 		}
-		transformedToType = *out
+		inputType = *out
 	}
-	if transformedToType == "" || toType == "" {
-		return nil
-	}
-	transformedToJSONType := transformedToType.ToKnownJSONType()
-
-	// integer is a subset of number per JSON specification:
-	// https://datatracker.ietf.org/doc/html/draft-zyp-json-schema-04#section-3.5
-	if !transformedToJSONType.IsEquivalent(toType) {
-		if len(transforms) == 0 {
-			return field.Required(field.NewPath("transforms"), fmt.Sprintf("the fromFieldPath does not have a type compatible with the fromFieldPath according to their schemas and no transforms were provided: %s != %s", transformedToType, toType))
-		}
-		return field.Invalid(field.NewPath("transforms"), transforms, fmt.Sprintf("the provided transforms do not output a type compatible with the toFieldPath according to the schema: %s != %s", transformedToType, toType))
-	}
-
-	return nil
+	return inputType, nil
 }
 
 // validateFieldPath validates the given fieldPath is valid for the given schema.
