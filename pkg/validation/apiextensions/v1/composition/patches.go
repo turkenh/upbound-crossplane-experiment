@@ -231,7 +231,7 @@ func validateIOTypesWithTransforms(transforms []v1.Transform, fromType, toType x
 
 	if !transformedToJSONType.IsEquivalent(toType) {
 		if len(transforms) == 0 {
-			return field.Required(field.NewPath("transforms"), fmt.Sprintf("the fromFieldPath does not have a type compatible with the fromFieldPath according to their schemas and no transforms were provided: %s != %s", inputType, toType))
+			return field.Required(field.NewPath("transforms"), fmt.Sprintf("the fromFieldPath does not have a type compatible with the toFieldPath according to their schemas and no transforms were provided: %s != %s", inputType, toType))
 		}
 		return field.Invalid(field.NewPath("transforms"), transforms, fmt.Sprintf("the provided transforms do not output a type compatible with the toFieldPath according to the schema: %s != %s", inputType, toType))
 	}
