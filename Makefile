@@ -39,6 +39,9 @@ GOLANGCILINT_VERSION = 1.52.2
 # ====================================================================================
 # Setup Kubernetes tools
 
+HELM_DOCS_ENABLED = true
+HELM_VALUES_TEMPLATE_SKIPPED = false
+
 USE_HELM3 = true
 HELM3_VERSION = v3.6.3
 -include build/makelib/k8s_tools.mk
