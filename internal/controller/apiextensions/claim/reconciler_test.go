@@ -83,7 +83,7 @@ func TestReconcile(t *testing.T) {
 			args: args{
 				mgr: &fake.Manager{},
 				opts: []ReconcilerOption{
-					WithClientApplicator(resource.ClientApplicator{
+					WithServerSideApplicator(ServerSideApplicator{
 						Client: &test.MockClient{
 							MockGet: test.NewMockGetFn(kerrors.NewNotFound(schema.GroupResource{}, "")),
 						},
@@ -99,7 +99,7 @@ func TestReconcile(t *testing.T) {
 			args: args{
 				mgr: &fake.Manager{},
 				opts: []ReconcilerOption{
-					WithClientApplicator(resource.ClientApplicator{
+					WithServerSideApplicator(ServerSideApplicator{
 						Client: &test.MockClient{
 							MockGet:          test.NewMockGetFn(errBoom),
 							MockStatusUpdate: test.NewMockSubResourceUpdateFn(nil),
@@ -123,7 +123,7 @@ func TestReconcile(t *testing.T) {
 			args: args{
 				mgr: &fake.Manager{},
 				opts: []ReconcilerOption{
-					WithClientApplicator(resource.ClientApplicator{
+					WithServerSideApplicator(ServerSideApplicator{
 						Client: &test.MockClient{
 							MockGet: test.NewMockGetFn(kerrors.NewNotFound(schema.GroupResource{}, "")),
 						},
@@ -153,7 +153,7 @@ func TestReconcile(t *testing.T) {
 			args: args{
 				mgr: &fake.Manager{},
 				opts: []ReconcilerOption{
-					WithClientApplicator(resource.ClientApplicator{
+					WithServerSideApplicator(ServerSideApplicator{
 						Client: &test.MockClient{
 							MockGet: test.NewMockGetFn(nil, func(obj client.Object) error {
 								if o, ok := obj.(*composite.Unstructured); ok {
@@ -187,7 +187,7 @@ func TestReconcile(t *testing.T) {
 			args: args{
 				mgr: &fake.Manager{},
 				opts: []ReconcilerOption{
-					WithClientApplicator(resource.ClientApplicator{
+					WithServerSideApplicator(ServerSideApplicator{
 						Client: &test.MockClient{
 							MockGet: test.NewMockGetFn(nil, func(obj client.Object) error {
 								if o, ok := obj.(*composite.Unstructured); ok {
@@ -227,7 +227,7 @@ func TestReconcile(t *testing.T) {
 			args: args{
 				mgr: &fake.Manager{},
 				opts: []ReconcilerOption{
-					WithClientApplicator(resource.ClientApplicator{
+					WithServerSideApplicator(ServerSideApplicator{
 						Client: &test.MockClient{
 							MockDelete: test.NewMockDeleteFn(nil),
 						},
@@ -255,7 +255,7 @@ func TestReconcile(t *testing.T) {
 			args: args{
 				mgr: &fake.Manager{},
 				opts: []ReconcilerOption{
-					WithClientApplicator(resource.ClientApplicator{
+					WithServerSideApplicator(ServerSideApplicator{
 						Client: &test.MockClient{
 							MockDelete: test.NewMockDeleteFn(nil),
 							MockGet: test.NewMockGetFn(nil, func(obj client.Object) error {
@@ -296,7 +296,7 @@ func TestReconcile(t *testing.T) {
 			args: args{
 				mgr: &fake.Manager{},
 				opts: []ReconcilerOption{
-					WithClientApplicator(resource.ClientApplicator{
+					WithServerSideApplicator(ServerSideApplicator{
 						Client: &test.MockClient{
 							MockDelete: test.NewMockDeleteFn(nil),
 							MockGet: test.NewMockGetFn(nil, func(obj client.Object) error {
@@ -336,7 +336,7 @@ func TestReconcile(t *testing.T) {
 			args: args{
 				mgr: &fake.Manager{},
 				opts: []ReconcilerOption{
-					WithClientApplicator(resource.ClientApplicator{
+					WithServerSideApplicator(ServerSideApplicator{
 						Client: &test.MockClient{
 							MockDelete: test.NewMockDeleteFn(nil),
 							MockGet: test.NewMockGetFn(nil, func(obj client.Object) error {
@@ -444,7 +444,7 @@ func TestReconcile(t *testing.T) {
 			args: args{
 				mgr: &fake.Manager{},
 				opts: []ReconcilerOption{
-					WithClientApplicator(resource.ClientApplicator{
+					WithServerSideApplicator(ServerSideApplicator{
 						Client: &test.MockClient{
 							MockStatusUpdate: test.NewMockSubResourceUpdateFn(nil),
 						},
@@ -473,8 +473,8 @@ func TestReconcile(t *testing.T) {
 			args: args{
 				mgr: &fake.Manager{},
 				opts: []ReconcilerOption{
-					WithClientApplicator(resource.ClientApplicator{
-						Applicator: resource.ApplyFn(func(c context.Context, r client.Object, ao ...resource.ApplyOption) error {
+					WithServerSideApplicator(ServerSideApplicator{
+						Applicator: resource.ApplyFn(func(ctx context.Context, o client.Object, opts ...client.PatchOption) error {
 							return errBoom
 						}),
 					}),
@@ -502,7 +502,7 @@ func TestReconcile(t *testing.T) {
 			args: args{
 				mgr: &fake.Manager{},
 				opts: []ReconcilerOption{
-					WithClientApplicator(resource.ClientApplicator{
+					WithServerSideApplicator(ServerSideApplicator{
 						Client: &test.MockClient{
 							MockStatusUpdate: test.NewMockSubResourceUpdateFn(nil),
 						},
@@ -535,7 +535,7 @@ func TestReconcile(t *testing.T) {
 			args: args{
 				mgr: &fake.Manager{},
 				opts: []ReconcilerOption{
-					WithClientApplicator(resource.ClientApplicator{
+					WithServerSideApplicator(ServerSideApplicator{
 						Client: &test.MockClient{
 							MockStatusUpdate: test.NewMockSubResourceUpdateFn(nil),
 						},
@@ -568,7 +568,7 @@ func TestReconcile(t *testing.T) {
 			args: args{
 				mgr: &fake.Manager{},
 				opts: []ReconcilerOption{
-					WithClientApplicator(resource.ClientApplicator{
+					WithServerSideApplicator(ServerSideApplicator{
 						Client: &test.MockClient{
 							MockGet: test.NewMockGetFn(nil, func(obj client.Object) error {
 								if o, ok := obj.(*composite.Unstructured); ok {
@@ -610,7 +610,7 @@ func TestReconcile(t *testing.T) {
 			args: args{
 				mgr: &fake.Manager{},
 				opts: []ReconcilerOption{
-					WithClientApplicator(resource.ClientApplicator{
+					WithServerSideApplicator(ServerSideApplicator{
 						Client: &test.MockClient{
 							MockGet: test.NewMockGetFn(nil, func(obj client.Object) error {
 								if o, ok := obj.(*composite.Unstructured); ok {
@@ -671,7 +671,7 @@ func TestReconcile(t *testing.T) {
 					o.SetAnnotations(map[string]string{meta.AnnotationKeyReconciliationPaused: "true"})
 				}),
 				opts: []ReconcilerOption{
-					WithClientApplicator(resource.ClientApplicator{
+					WithServerSideApplicator(ServerSideApplicator{
 						Client: &test.MockClient{
 							MockStatusUpdate: test.NewMockSubResourceUpdateFn(errBoom),
 						},
@@ -691,7 +691,7 @@ func TestReconcile(t *testing.T) {
 			args: args{
 				mgr: &fake.Manager{},
 				opts: []ReconcilerOption{
-					WithClientApplicator(resource.ClientApplicator{
+					WithServerSideApplicator(ServerSideApplicator{
 						Client: &test.MockClient{
 							MockGet: test.NewMockGetFn(nil, func(obj client.Object) error {
 								if o, ok := obj.(*composite.Unstructured); ok {
@@ -736,7 +736,7 @@ func TestReconcile(t *testing.T) {
 			args: args{
 				mgr: &fake.Manager{},
 				opts: []ReconcilerOption{
-					WithClientApplicator(resource.ClientApplicator{
+					WithServerSideApplicator(ServerSideApplicator{
 						Client: &test.MockClient{
 							MockGet: test.NewMockGetFn(nil, func(obj client.Object) error {
 								if o, ok := obj.(*composite.Unstructured); ok {

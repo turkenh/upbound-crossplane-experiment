@@ -190,7 +190,7 @@ func (fn DefaultsSelectorFn) SelectDefaults(ctx context.Context, cm resource.Com
 // type of resource class provisioner. Each controller must watch its subset of
 // composite resource claims and any composite resources they control.
 type Reconciler struct {
-	client       resource.ClientApplicator
+	client       ServerSideApplicator
 	newClaim     func() resource.CompositeClaim
 	newComposite func() resource.Composite
 
@@ -237,9 +237,9 @@ func defaultCRClaim(c client.Client) crClaim {
 // A ReconcilerOption configures a Reconciler.
 type ReconcilerOption func(*Reconciler)
 
-// WithClientApplicator specifies how the Reconciler should interact with the
+// WithServerSideApplicator specifies how the Reconciler should interact with the
 // Kubernetes API.
-func WithClientApplicator(ca resource.ClientApplicator) ReconcilerOption {
+func WithServerSideApplicator(ca ServerSideApplicator) ReconcilerOption {
 	return func(r *Reconciler) {
 		r.client = ca
 	}
@@ -326,6 +326,16 @@ func WithPollInterval(after time.Duration) ReconcilerOption {
 	}
 }
 
+// An Applicator applies changes to an object.
+type Applicator interface {
+	Apply(ctx context.Context, o client.Object, opts ...client.PatchOption) error
+}
+
+type ServerSideApplicator struct {
+	client.Client
+	Applicator
+}
+
 // NewReconciler returns a Reconciler that reconciles composite resource claims of
 // the supplied CompositeClaimKind with resources of the supplied CompositeKind.
 // The returned Reconciler will apply only the ObjectMetaConfigurator by
@@ -334,9 +344,9 @@ func WithPollInterval(after time.Duration) ReconcilerOption {
 func NewReconciler(m manager.Manager, of resource.CompositeClaimKind, with resource.CompositeKind, o ...ReconcilerOption) *Reconciler {
 	c := unstructured.NewClient(m.GetClient())
 	r := &Reconciler{
-		client: resource.ClientApplicator{
+		client: ServerSideApplicator{
 			Client:     c,
-			Applicator: resource.NewAPIPatchingApplicator(c),
+			Applicator: resource.NewAPIServerSideApplicator(c),
 		},
 		newClaim: func() resource.CompositeClaim {
 			return claim.New(claim.WithGroupVersionKind(schema.GroupVersionKind(of)))
@@ -521,7 +531,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 		return reconcile.Result{Requeue: true}, errors.Wrap(r.client.Status().Update(ctx, cm), errUpdateClaimStatus)
 	}
 
-	if err := r.client.Apply(ctx, cp); err != nil {
+	if err := r.client.Apply(ctx, cp, &client.PatchOptions{FieldManager: "claim-controller"}); err != nil {
 		log.Debug(errApplyComposite, "error", err)
 		err = errors.Wrap(err, errApplyComposite)
 		record.Event(cm, event.Warning(reasonCompositeConfigure, err))
