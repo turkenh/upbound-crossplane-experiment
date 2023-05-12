@@ -96,6 +96,7 @@ const (
 	reasonLint         event.Reason = "LintPackage"
 	reasonDependencies event.Reason = "ResolveDependencies"
 	reasonSync         event.Reason = "SyncPackage"
+	reasonDeactivate   event.Reason = "DeactivateRevision"
 )
 
 // ReconcilerOption is used to configure the Reconciler.
@@ -349,6 +350,16 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 		// we'll be requeued implicitly because we return an error.
 		log.Debug(errGetPackageRevision, "error", err)
 		return reconcile.Result{}, errors.Wrap(resource.IgnoreNotFound(err), errGetPackageRevision)
+	}
+
+	// Deactivate revision if it is inactive.
+	if pr.GetDesiredState() == v1.PackageRevisionInactive {
+		if err := r.deactivateRevision(ctx, pr); err != nil {
+			log.Debug("cannot deactivate revision", "error", err)
+			err = errors.Wrap(err, "cannot deactivate revision")
+			r.record.Event(pr, event.Warning(reasonDeactivate, err))
+			return reconcile.Result{}, err
+		}
 	}
 
 	if meta.WasDeleted(pr) {
@@ -622,4 +633,22 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 	r.record.Event(pr, event.Normal(reasonSync, "Successfully configured package revision"))
 	pr.SetConditions(v1.Healthy())
 	return reconcile.Result{Requeue: false}, errors.Wrap(r.client.Status().Update(ctx, pr), errUpdateStatus)
+}
+
+func (r *Reconciler) deactivateRevision(ctx context.Context, pr v1.PackageRevision) error {
+	// If we are inactive, we want to remove self from the lock.
+	// If we skipped dependency resolution, we will not be present in the lock.
+	if err := r.lock.RemoveSelf(ctx, pr); err != nil {
+		return errors.Wrap(err, errRemoveLock)
+	}
+
+	if err := r.objects.Relinquish(ctx, pr); err != nil {
+		return errors.Wrap(err, "cannot relinquish objects")
+	}
+
+	if err := r.hook.Deactivate(ctx, pr); err != nil {
+		return errors.Wrap(err, "deactivation hook failed")
+	}
+
+	return nil
 }

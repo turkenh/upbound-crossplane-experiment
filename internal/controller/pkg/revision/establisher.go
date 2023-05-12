@@ -19,6 +19,7 @@ package revision
 import (
 	"context"
 	"fmt"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"strings"
 
 	"golang.org/x/sync/errgroup"
@@ -59,6 +60,7 @@ const (
 // resources and then establishing it.
 type Establisher interface {
 	Establish(ctx context.Context, objects []runtime.Object, parent v1.PackageRevision, control bool) ([]xpv1.TypedReference, error)
+	Relinquish(ctx context.Context, parent v1.PackageRevision) error
 }
 
 // NewNopEstablisher returns a new NopEstablisher.
@@ -72,6 +74,11 @@ type NopEstablisher struct{}
 // Establish does nothing.
 func (*NopEstablisher) Establish(_ context.Context, _ []runtime.Object, _ v1.PackageRevision, _ bool) ([]xpv1.TypedReference, error) {
 	return nil, nil
+}
+
+// Relinquish does nothing.
+func (*NopEstablisher) Relinquish(ctx context.Context, parent v1.PackageRevision) error {
+	return nil
 }
 
 // APIEstablisher establishes control or ownership of resources in the API
@@ -115,6 +122,38 @@ func (e *APIEstablisher) Establish(ctx context.Context, objs []runtime.Object, p
 		return nil, err
 	}
 	return resourceRefs, nil
+}
+
+func (e *APIEstablisher) Relinquish(ctx context.Context, parent v1.PackageRevision) error {
+	// Stop controlling objects.
+	// TODO(turkenh): Should we parallelize this?
+	objRefs := parent.GetObjects()
+	for _, ref := range objRefs {
+		u := unstructured.Unstructured{}
+		u.SetAPIVersion(ref.APIVersion)
+		u.SetKind(ref.Kind)
+		u.SetName(ref.Name)
+
+		if err := e.client.Get(ctx, types.NamespacedName{Name: u.GetName()}, &u); err != nil {
+			if kerrors.IsNotFound(err) {
+				// This is not expected, but still not an error for relinquishing.
+				continue
+			}
+			return errors.Wrap(err, "cannot get controlled object")
+		}
+		ors := u.GetOwnerReferences()
+		for i := range ors {
+			if ors[i].UID == parent.GetUID() {
+				ors[i].Controller = pointer.Bool(false)
+				break
+			}
+		}
+		u.SetOwnerReferences(ors)
+		if err := e.client.Update(ctx, &u); err != nil {
+			return errors.Wrap(err, "cannot update controlled object")
+		}
+	}
+	return nil
 }
 
 func (e *APIEstablisher) addLabels(objs []runtime.Object, parent v1.PackageRevision) error {
