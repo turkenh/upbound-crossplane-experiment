@@ -35,26 +35,34 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/controller"
 )
 
+const (
+	// key used to index CRDs by "Kind" and "group", to be used when
+	// indexing and retrieving needed CRDs
+	usingIndexKey = "using.apiversion.kind.name"
+)
+
 // handler implements the admission handler for Composition.
 type handler struct {
 	reader  client.Reader
 	options controller.Options
 }
 
+func getIndexValueForUsage(u *v1alpha1.Usage) string {
+	return fmt.Sprintf("%s.%s.%s", u.Spec.Of.APIVersion, u.Spec.Of.Kind, u.Spec.Of.Name)
+}
+func getIndexValueForObject(u *unstructured.Unstructured) string {
+	return fmt.Sprintf("%s.%s.%s", u.GetAPIVersion(), u.GetKind(), u.GetName())
+}
+
 // SetupWebhookWithManager sets up the webhook with the manager.
 func SetupWebhookWithManager(mgr ctrl.Manager, options controller.Options) error {
 
-	/*	indexer := mgr.GetFieldIndexer()
-		if err := indexer.IndexField(context.Background(), &extv1.CustomResourceDefinition{}, "spec.group", func(obj client.Object) []string {
-			return []string{obj.(*extv1.CustomResourceDefinition).Spec.Group}
-		}); err != nil {
-			return err
-		}
-		if err := indexer.IndexField(context.Background(), &extv1.CustomResourceDefinition{}, "spec.names.kind", func(obj client.Object) []string {
-			return []string{obj.(*extv1.CustomResourceDefinition).Spec.Names.Kind}
-		}); err != nil {
-			return err
-		}*/
+	indexer := mgr.GetFieldIndexer()
+	if err := indexer.IndexField(context.Background(), &v1alpha1.Usage{}, usingIndexKey, func(obj client.Object) []string {
+		return []string{getIndexValueForUsage(obj.(*v1alpha1.Usage))}
+	}); err != nil {
+		return err
+	}
 
 	mgr.GetWebhookServer().Register("/validate-no-usages",
 		&webhook.Admission{Handler: &handler{
@@ -85,12 +93,12 @@ func (h *handler) validateNoUsages(ctx context.Context, u *unstructured.Unstruct
 	fmt.Println("Checking for usages")
 
 	usageList := &v1alpha1.UsageList{}
-	if err := h.reader.List(ctx, usageList); err != nil {
+	if err := h.reader.List(ctx, usageList, client.MatchingFields{usingIndexKey: getIndexValueForObject(u)}); err != nil {
 		return admission.Errored(http.StatusInternalServerError, err)
 	}
 	for _, usage := range usageList.Items {
 		if usage.Spec.Of.APIVersion == u.GetAPIVersion() && usage.Spec.Of.Kind == u.GetKind() && usage.Spec.Of.Name == u.GetName() {
-			return admission.Denied(fmt.Sprintf("The resource has useges by %s/%s", u.GroupVersionKind().String(), usage.Spec.By.Name))
+			return admission.Denied(fmt.Sprintf("The resource is used by %s/%s", u.GroupVersionKind().String(), usage.Spec.By.Name))
 		}
 	}
 	return admission.Allowed("")
