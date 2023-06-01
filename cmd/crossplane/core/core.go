@@ -18,6 +18,7 @@ limitations under the License.
 package core
 
 import (
+	"github.com/crossplane/crossplane/internal/usage"
 	"net/http"
 	"net/http/pprof"
 	"os"
@@ -256,6 +257,9 @@ func (c *startCommand) Run(s *runtime.Scheme, log logging.Logger) error { //noli
 		}
 		if err := composition.SetupWebhookWithManager(mgr, o); err != nil {
 			return errors.Wrap(err, "cannot setup webhook for compositions")
+		}
+		if err := usage.SetupWebhookWithManager(mgr, o); err != nil {
+			return errors.Wrap(err, "cannot setup webhook for usages")
 		}
 	}
 
