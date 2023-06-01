@@ -21,7 +21,6 @@ import (
 	"context"
 	"github.com/crossplane/crossplane-runtime/pkg/meta"
 	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured/dependency"
-	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured/dependent"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"strings"
@@ -158,13 +157,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 		APIVersion: u.Spec.By.APIVersion,
 		UID:        u.Spec.By.UID,
 	}))
-	// Identify using resource as an unstructured object.
-	used := dependent.New(dependent.FromReference(v1.ObjectReference{
-		Kind:       u.Spec.Of.Kind,
-		Name:       u.Spec.Of.Name,
-		APIVersion: u.Spec.Of.APIVersion,
-		UID:        u.Spec.Of.UID,
-	}))
 
 	if meta.WasDeleted(u) {
 		// Get the using resource
@@ -179,21 +171,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 			return reconcile.Result{RequeueAfter: 1 * time.Minute}, nil
 		}
 		// Using resource is deleted, we can proceed with the deletion of the usage
-
-		// Get the used resource
-		err = r.client.Get(ctx, client.ObjectKey{Name: u.Spec.Of.Name}, used)
-		if resource.IgnoreNotFound(err) != nil {
-			log.Debug(errGetUsed, "error", err)
-			return reconcile.Result{}, errors.Wrap(resource.IgnoreNotFound(err), errGetUsed)
-		}
-		// Unblock the used resource if found
-		if err == nil {
-			meta.UnblockExternalDelete(used, using)
-			if err := r.client.Update(ctx, used); err != nil {
-				log.Debug(errUnblock, "error", err)
-				return reconcile.Result{}, errors.Wrap(err, errUnblock)
-			}
-		}
 
 		// Remove the finalizer from the usage
 		if err = r.usage.RemoveFinalizer(ctx, u); err != nil {
@@ -210,31 +187,17 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 		return reconcile.Result{}, errors.Wrap(err, errGetUsing)
 	}
 
-	// Get the used resource
-	if err := r.client.Get(ctx, client.ObjectKey{Name: u.Spec.Of.Name}, used); err != nil {
-		log.Debug(errGetUsed, "error", err)
-		return reconcile.Result{}, errors.Wrap(err, errGetUsed)
-	}
-
 	// Usage should have a finalizer and be owned by the using resource.
 	if owners := u.GetOwnerReferences(); len(owners) == 0 || owners[0].UID != using.GetUID() {
 		u.Finalizers = []string{finalizer}
 		u.SetOwnerReferences([]metav1.OwnerReference{meta.AsController(
 			meta.TypedReferenceTo(using, using.GetObjectKind().GroupVersionKind()),
 		)})
-		u.Spec.Of.UID = used.GetUID()
 		u.Spec.By.UID = using.GetUID()
 		if err := r.client.Update(ctx, u); err != nil {
 			log.Debug(errAddOwnerReference, "error", err)
 			return reconcile.Result{}, err
 		}
-	}
-
-	// Add the blocker annotation to the used resource
-	meta.BlockExternalDelete(used, using)
-	if err := r.client.Update(ctx, used); err != nil {
-		log.Debug(errBlock, "error", err)
-		return reconcile.Result{}, err
 	}
 
 	return reconcile.Result{}, nil
