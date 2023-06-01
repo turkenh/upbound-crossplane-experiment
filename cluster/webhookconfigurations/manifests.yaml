@@ -44,3 +44,22 @@ webhooks:
     resources:
     - compositeresourcedefinitions
   sideEffects: None
+- admissionReviewVersions:
+    - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-no-usages
+  failurePolicy: Fail
+  name: nousages.apiextensions.crossplane.io
+  rules:
+    - apiGroups:
+        - "*"
+      apiVersions:
+        - "*"
+      operations:
+        - DELETE
+      resources:
+        - "*"
+  sideEffects: None
