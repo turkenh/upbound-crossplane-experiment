@@ -21,18 +21,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	xpunstructured "github.com/crossplane/crossplane-runtime/pkg/resource/unstructured"
-	"github.com/crossplane/crossplane/apis/apiextensions/v1alpha1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"net/http"
 
 	admissionv1 "k8s.io/api/admission/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	"github.com/crossplane/crossplane-runtime/pkg/controller"
+	xpunstructured "github.com/crossplane/crossplane-runtime/pkg/resource/unstructured"
+
+	"github.com/crossplane/crossplane/apis/apiextensions/v1alpha1"
 )
 
 const (
@@ -47,8 +48,12 @@ type handler struct {
 	options controller.Options
 }
 
-func getIndexValueForUsage(u *v1alpha1.Usage) string {
-	return fmt.Sprintf("%s.%s.%s", u.Spec.Of.APIVersion, u.Spec.Of.Kind, u.Spec.Of.Name)
+func getIndexValueForUsage(u *v1alpha1.Usage) []string {
+	s := make([]string, len(u.Spec.Of))
+	for i, of := range u.Spec.Of {
+		s[i] = fmt.Sprintf("%s.%s.%s", of.APIVersion, of.Kind, of.Name)
+	}
+	return s
 }
 func getIndexValueForObject(u *unstructured.Unstructured) string {
 	return fmt.Sprintf("%s.%s.%s", u.GetAPIVersion(), u.GetKind(), u.GetName())
@@ -59,7 +64,7 @@ func SetupWebhookWithManager(mgr ctrl.Manager, options controller.Options) error
 
 	indexer := mgr.GetFieldIndexer()
 	if err := indexer.IndexField(context.Background(), &v1alpha1.Usage{}, usingIndexKey, func(obj client.Object) []string {
-		return []string{getIndexValueForUsage(obj.(*v1alpha1.Usage))}
+		return getIndexValueForUsage(obj.(*v1alpha1.Usage))
 	}); err != nil {
 		return err
 	}
@@ -91,15 +96,12 @@ func (h *handler) Handle(ctx context.Context, request admission.Request) admissi
 
 func (h *handler) validateNoUsages(ctx context.Context, u *unstructured.Unstructured) admission.Response {
 	fmt.Println("Checking for usages")
-
 	usageList := &v1alpha1.UsageList{}
 	if err := h.reader.List(ctx, usageList, client.MatchingFields{usingIndexKey: getIndexValueForObject(u)}); err != nil {
 		return admission.Errored(http.StatusInternalServerError, err)
 	}
-	for _, usage := range usageList.Items {
-		if usage.Spec.Of.APIVersion == u.GetAPIVersion() && usage.Spec.Of.Kind == u.GetKind() && usage.Spec.Of.Name == u.GetName() {
-			return admission.Denied(fmt.Sprintf("The resource is used by %s/%s", u.GroupVersionKind().String(), usage.Spec.By.Name))
-		}
+	if len(usageList.Items) > 0 {
+		return admission.Denied(fmt.Sprintf("The resource is used by %s/%s", usageList.Items[0].Spec.By.Kind, usageList.Items[0].Spec.By.Name))
 	}
 	return admission.Allowed("")
 }

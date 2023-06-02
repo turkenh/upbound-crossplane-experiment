@@ -18,13 +18,13 @@ limitations under the License.
 package apiextensions
 
 import (
-	"github.com/crossplane/crossplane/internal/controller/apiextensions/usage"
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	"github.com/crossplane/crossplane/internal/controller/apiextensions/composition"
 	"github.com/crossplane/crossplane/internal/controller/apiextensions/controller"
 	"github.com/crossplane/crossplane/internal/controller/apiextensions/definition"
 	"github.com/crossplane/crossplane/internal/controller/apiextensions/offered"
+	"github.com/crossplane/crossplane/internal/controller/apiextensions/usage"
 )
 
 // Setup API extensions controllers.
