@@ -21,6 +21,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"net/http"
 
 	admissionv1 "k8s.io/api/admission/v1"
@@ -39,7 +40,7 @@ import (
 const (
 	// key used to index CRDs by "Kind" and "group", to be used when
 	// indexing and retrieving needed CRDs
-	usingIndexKey = "using.apiversion.kind.name"
+	inUseIndexKey = "inuse.apiversion.kind.name"
 )
 
 // handler implements the admission handler for Composition.
@@ -63,7 +64,7 @@ func getIndexValueForObject(u *unstructured.Unstructured) string {
 func SetupWebhookWithManager(mgr ctrl.Manager, options controller.Options) error {
 
 	indexer := mgr.GetFieldIndexer()
-	if err := indexer.IndexField(context.Background(), &v1alpha1.Usage{}, usingIndexKey, func(obj client.Object) []string {
+	if err := indexer.IndexField(context.Background(), &v1alpha1.Usage{}, inUseIndexKey, func(obj client.Object) []string {
 		return getIndexValueForUsage(obj.(*v1alpha1.Usage))
 	}); err != nil {
 		return err
@@ -97,11 +98,19 @@ func (h *handler) Handle(ctx context.Context, request admission.Request) admissi
 func (h *handler) validateNoUsages(ctx context.Context, u *unstructured.Unstructured) admission.Response {
 	fmt.Println("Checking for usages")
 	usageList := &v1alpha1.UsageList{}
-	if err := h.reader.List(ctx, usageList, client.MatchingFields{usingIndexKey: getIndexValueForObject(u)}); err != nil {
+	if err := h.reader.List(ctx, usageList, client.MatchingFields{inUseIndexKey: getIndexValueForObject(u)}); err != nil {
 		return admission.Errored(http.StatusInternalServerError, err)
 	}
 	if len(usageList.Items) > 0 {
-		return admission.Denied(fmt.Sprintf("The resource is used by %s/%s", usageList.Items[0].Spec.By.Kind, usageList.Items[0].Spec.By.Name))
+		return admission.Response{
+			AdmissionResponse: admissionv1.AdmissionResponse{
+				Allowed: false,
+				Result: &metav1.Status{
+					Code:   int32(http.StatusConflict),
+					Reason: metav1.StatusReason(fmt.Sprintf("The resource is used by %s/%s", usageList.Items[0].Spec.By.Kind, usageList.Items[0].Spec.By.Name)),
+				},
+			},
+		}
 	}
 	return admission.Allowed("")
 }
