@@ -1,7 +1,7 @@
 # Crossplane E2E Tests
 
 * Owner: Nic Cope (@negz)
-* Reviewers: Dan Mangum (@hasheddan)
+* Reviewers: Hasan Turken (@turkenh)
 * Status: Accepted
 
 ## Background
