@@ -23,13 +23,12 @@ import (
 	"sigs.k8s.io/e2e-framework/pkg/features"
 
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
+
 	pkgv1 "github.com/crossplane/crossplane/apis/pkg/v1"
 	"github.com/crossplane/crossplane/test/e2e/funcs"
 )
 
 func TestConfiguration(t *testing.T) {
-	t.Parallel()
-
 	// Test that we can install a Configuration from a private repository using
 	// a package pull secret.
 	manifests := "test/e2e/manifests/pkg/configuration/private"
