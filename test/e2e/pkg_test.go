@@ -101,11 +101,6 @@ func TestConfiguration(t *testing.T) {
 }
 
 func TestProvider(t *testing.T) {
-	// TODO(negz): This can't run in parallel with any other test that would
-	// install provider-nop - i.e. TestComposition. Do we need to spin up a
-	// kind cluster per test? How would that work if we ever wanted this test to
-	// be able to run on a real cluster?
-
 	// Test that we can upgrade a provider to a new version, even when a managed
 	// resource has been created.
 	manifests := "test/e2e/manifests/pkg/provider"
