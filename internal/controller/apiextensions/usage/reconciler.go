@@ -190,7 +190,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 	// Usage should have a finalizer and be owned by the using resource.
 	if owners := u.GetOwnerReferences(); len(owners) == 0 || owners[0].UID != using.GetUID() {
 		u.Finalizers = []string{finalizer}
-		u.SetOwnerReferences([]metav1.OwnerReference{meta.AsController(
+		u.SetOwnerReferences([]metav1.OwnerReference{meta.AsOwner(
 			meta.TypedReferenceTo(using, using.GetObjectKind().GroupVersionKind()),
 		)})
 		u.Spec.By.UID = using.GetUID()

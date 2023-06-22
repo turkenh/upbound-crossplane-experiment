@@ -107,7 +107,7 @@ func (h *handler) validateNoUsages(ctx context.Context, u *unstructured.Unstruct
 				Allowed: false,
 				Result: &metav1.Status{
 					Code:   int32(http.StatusConflict),
-					Reason: metav1.StatusReason(fmt.Sprintf("The resource is used by %s/%s", usageList.Items[0].Spec.By.Kind, usageList.Items[0].Spec.By.Name)),
+					Reason: metav1.StatusReason(fmt.Sprintf("The resource is used by %d resources, including %s/%s", len(usageList.Items), usageList.Items[0].Spec.By.Kind, usageList.Items[0].Spec.By.Name)),
 				},
 			},
 		}
