@@ -36,10 +36,10 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/ratelimiter"
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
 	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured"
-	"github.com/crossplane/crossplane/internal/controller/apiextensions/usage/dependency"
 
 	"github.com/crossplane/crossplane/apis/apiextensions/v1alpha1"
 	apiextensionscontroller "github.com/crossplane/crossplane/internal/controller/apiextensions/controller"
+	"github.com/crossplane/crossplane/internal/controller/apiextensions/usage/dependency"
 )
 
 const (
@@ -130,7 +130,7 @@ type Reconciler struct {
 
 // Reconcile a Usage by defining a new kind of composite
 // resource and starting a controller to reconcile it.
-func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) { //nolint:gocyclo // Reconcilers are complex. Be wary of adding more.
+func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) { 
 	log := r.log.WithValues("request", req)
 	log.Debug("Reconciling Usage")
 

@@ -14,8 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// +kubebuilder:webhook:verbs=delete,path=/validate-no-usages,mutating=false,failurePolicy=fail,groups="*",resources="*",versions="*",name=nousages.apiextensions.crossplane.io,sideEffects=None,admissionReviewVersions=v1
-
 package v1alpha1
 
 import (
