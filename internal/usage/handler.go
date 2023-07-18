@@ -49,23 +49,16 @@ type handler struct {
 	options controller.Options
 }
 
-func getIndexValueForUsage(u *v1alpha1.Usage) []string {
-	s := make([]string, len(u.Spec.Of))
-	for i, of := range u.Spec.Of {
-		s[i] = fmt.Sprintf("%s.%s.%s", of.APIVersion, of.Kind, of.Name)
-	}
-	return s
-}
 func getIndexValueForObject(u *unstructured.Unstructured) string {
 	return fmt.Sprintf("%s.%s.%s", u.GetAPIVersion(), u.GetKind(), u.GetName())
 }
 
 // SetupWebhookWithManager sets up the webhook with the manager.
 func SetupWebhookWithManager(mgr ctrl.Manager, options controller.Options) error {
-
 	indexer := mgr.GetFieldIndexer()
 	if err := indexer.IndexField(context.Background(), &v1alpha1.Usage{}, inUseIndexKey, func(obj client.Object) []string {
-		return getIndexValueForUsage(obj.(*v1alpha1.Usage))
+		u := obj.(*v1alpha1.Usage)
+		return []string{fmt.Sprintf("%s.%s.%s", u.Spec.Of.APIVersion, u.Spec.Of.Kind, u.Spec.Of.Name)}
 	}); err != nil {
 		return err
 	}
@@ -112,5 +105,6 @@ func (h *handler) validateNoUsages(ctx context.Context, u *unstructured.Unstruct
 			},
 		}
 	}
+
 	return admission.Allowed("")
 }

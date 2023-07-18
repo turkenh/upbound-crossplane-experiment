@@ -20,6 +20,7 @@ package dependency
 import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 // An Option modifies an unstructured composed resource.
@@ -53,4 +54,13 @@ type Unstructured struct {
 // GetUnstructured returns the underlying *unstructured.Unstructured.
 func (cr *Unstructured) GetUnstructured() *unstructured.Unstructured {
 	return &cr.Unstructured
+}
+
+func (cr *Unstructured) OwnedBy(u types.UID) bool {
+	for _, owner := range cr.GetOwnerReferences() {
+		if owner.UID == u {
+			return true
+		}
+	}
+	return false
 }

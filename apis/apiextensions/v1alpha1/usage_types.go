@@ -49,8 +49,8 @@ type UsageList struct {
 }
 
 type UsageSpec struct {
-	Of []ResourceReference `json:"of"`
-	By ResourceReference   `json:"by"`
+	Of ResourceReference `json:"of"`
+	By ResourceReference `json:"by"`
 }
 
 type ResourceReference struct {

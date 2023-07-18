@@ -43,17 +43,15 @@ import (
 )
 
 const (
-	timeout   = 2 * time.Minute
-	finalizer = "usage.apiextensions.crossplane.io"
+	timeout       = 2 * time.Minute
+	finalizer     = "usage.apiextensions.crossplane.io"
+	inUseLabelKey = "crossplane.io/in-use"
 
-	errGetUsage          = "cannot get usage"
-	errGetUsing          = "cannot get using"
-	errGetUsed           = "cannot get used"
-	errBlock             = "cannot add blocker annotation"
-	errUnblock           = "cannot remove from blocker annotation"
-	errAddOwnerReference = "cannot add owner reference"
-	errAddFinalizer      = "cannot add composite resource finalizer"
-	errRemoveFinalizer   = "cannot remove composite resource finalizer"
+	errGetUsage        = "cannot get usage"
+	errGetUsing        = "cannot get using"
+	errGetUsed         = "cannot get used"
+	errAddInUseLabel   = "cannot add inuse label and owner reference"
+	errRemoveFinalizer = "cannot remove composite resource finalizer"
 )
 
 // Setup adds a controller that reconciles Usages by
@@ -130,7 +128,7 @@ type Reconciler struct {
 
 // Reconcile a Usage by defining a new kind of composite
 // resource and starting a controller to reconcile it.
-func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) { 
+func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
 	log := r.log.WithValues("request", req)
 	log.Debug("Reconciling Usage")
 
@@ -172,6 +170,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 		}
 		// Using resource is deleted, we can proceed with the deletion of the usage
 
+		// TODO(turkenh): Remove the in-use label from the used resource if
+		//  there are no other usages referencing it.
+
 		// Remove the finalizer from the usage
 		if err = r.usage.RemoveFinalizer(ctx, u); err != nil {
 			log.Debug(errRemoveFinalizer, "error", err)
@@ -195,7 +196,42 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 		)})
 		u.Spec.By.UID = using.GetUID()
 		if err := r.client.Update(ctx, u); err != nil {
-			log.Debug(errAddOwnerReference, "error", err)
+			log.Debug(errAddInUseLabel, "error", err)
+			return reconcile.Result{}, err
+		}
+	}
+
+	// Identify used resource as an unstructured object.
+	used := dependency.New(dependency.FromReference(v1.ObjectReference{
+		Kind:       u.Spec.Of.Kind,
+		Name:       u.Spec.Of.Name,
+		APIVersion: u.Spec.Of.APIVersion,
+		UID:        u.Spec.Of.UID,
+	}))
+
+	// Get the used resource
+	if err := r.client.Get(ctx, client.ObjectKey{Name: u.Spec.Of.Name}, used); err != nil {
+		log.Debug(errGetUsed, "error", err)
+		return reconcile.Result{}, errors.Wrap(err, errGetUsed)
+	}
+
+	// Used resource should have in-use label and be owned by the Usage resource.
+	if used.GetLabels()[inUseLabelKey] != "true" || !used.OwnedBy(u.GetUID()) {
+		l := used.GetLabels()
+		if l == nil {
+			l = map[string]string{}
+		}
+		l[inUseLabelKey] = "true"
+		used.SetLabels(l)
+
+		o := used.GetOwnerReferences()
+		if o == nil {
+			o = []metav1.OwnerReference{}
+		}
+		o = append(o, meta.AsOwner(meta.TypedReferenceTo(u, u.GetObjectKind().GroupVersionKind())))
+		used.SetOwnerReferences(o)
+		if err := r.client.Update(ctx, used); err != nil {
+			log.Debug(errAddInUseLabel, "error", err)
 			return reconcile.Result{}, err
 		}
 	}
