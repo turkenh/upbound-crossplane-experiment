@@ -6,8 +6,10 @@ spec:
   of:
     apiVersion: nop.crossplane.io/v1alpha1
     kind: NopResource
-    name: used-resource
+    resourceRef:
+      name: used-resource
   by:
     apiVersion: nop.crossplane.io/v1alpha1
     kind: NopResource
-    name: using-resource
+    resourceRef:
+      name: using-resource

@@ -15,7 +15,7 @@ webhooks:
     name: nousages.apiextensions.crossplane.io
     objectSelector:
       matchLabels:
-        crossplane.io/in-use: true
+        crossplane.io/in-use: "true"
     rules:
       - apiGroups:
           - '*'

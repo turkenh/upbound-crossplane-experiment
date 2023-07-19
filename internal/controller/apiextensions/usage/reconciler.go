@@ -148,17 +148,19 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 		"name", u.GetName(),
 	)
 
+	// TODO(turkenh): Resolve selectors.
+
 	// Identify using resource as an unstructured object.
 	using := dependency.New(dependency.FromReference(v1.ObjectReference{
 		Kind:       u.Spec.By.Kind,
-		Name:       u.Spec.By.Name,
+		Name:       u.Spec.By.ResourceRef.Name,
 		APIVersion: u.Spec.By.APIVersion,
 		UID:        u.Spec.By.UID,
 	}))
 
 	if meta.WasDeleted(u) {
 		// Get the using resource
-		err := r.client.Get(ctx, client.ObjectKey{Name: u.Spec.By.Name}, using)
+		err := r.client.Get(ctx, client.ObjectKey{Name: u.Spec.By.ResourceRef.Name}, using)
 		if resource.IgnoreNotFound(err) != nil {
 			log.Debug(errGetUsing, "error", err)
 			return reconcile.Result{}, errors.Wrap(resource.IgnoreNotFound(err), errGetUsing)
@@ -183,7 +185,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 	}
 
 	// Get the using resource
-	if err := r.client.Get(ctx, client.ObjectKey{Name: u.Spec.By.Name}, using); err != nil {
+	if err := r.client.Get(ctx, client.ObjectKey{Name: u.Spec.By.ResourceRef.Name}, using); err != nil {
 		log.Debug(errGetUsing, "error", err)
 		return reconcile.Result{}, errors.Wrap(err, errGetUsing)
 	}
@@ -204,13 +206,13 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 	// Identify used resource as an unstructured object.
 	used := dependency.New(dependency.FromReference(v1.ObjectReference{
 		Kind:       u.Spec.Of.Kind,
-		Name:       u.Spec.Of.Name,
+		Name:       u.Spec.Of.ResourceRef.Name,
 		APIVersion: u.Spec.Of.APIVersion,
 		UID:        u.Spec.Of.UID,
 	}))
 
 	// Get the used resource
-	if err := r.client.Get(ctx, client.ObjectKey{Name: u.Spec.Of.Name}, used); err != nil {
+	if err := r.client.Get(ctx, client.ObjectKey{Name: u.Spec.Of.ResourceRef.Name}, used); err != nil {
 		log.Debug(errGetUsed, "error", err)
 		return reconcile.Result{}, errors.Wrap(err, errGetUsed)
 	}

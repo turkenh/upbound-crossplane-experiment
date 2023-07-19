@@ -47,14 +47,14 @@ spec:
         of:
           apiVersion: nop.crossplane.io/v1alpha1
           kind: NopResource
-          selector:
+          resourceSelector:
             matchControllerRef: true
             matchLabels:
               usage: used
         by:
           apiVersion: nop.crossplane.io/v1alpha1
           kind: NopResource
-          selector:
+          resourceSelector:
             matchControllerRef: true
             matchLabels:
               usage: using

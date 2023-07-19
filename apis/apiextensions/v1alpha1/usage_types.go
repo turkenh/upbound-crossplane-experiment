@@ -49,11 +49,26 @@ type UsageList struct {
 }
 
 type UsageSpec struct {
-	Of ResourceReference `json:"of"`
-	By ResourceReference `json:"by"`
+	Of Resource `json:"of"`
+	By Resource `json:"by"`
 }
 
-type ResourceReference struct {
+type ResourceRef struct {
+	// Name of the referent.
+	// +optional
+	Name string `json:"name,omitempty"`
+}
+
+type ResourceSelector struct {
+	// MatchLabels ensures an object with matching labels is selected.
+	MatchLabels map[string]string `json:"matchLabels,omitempty"`
+
+	// MatchControllerRef ensures an object with the same controller reference
+	// as the selecting object is selected.
+	MatchControllerRef *bool `json:"matchControllerRef,omitempty"`
+}
+
+type Resource struct {
 	// API version of the referent.
 	// +optional
 	APIVersion string `json:"apiVersion,omitempty"`
@@ -61,12 +76,14 @@ type ResourceReference struct {
 	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
 	// +optional
 	Kind string `json:"kind,omitempty"`
-	// Name of the referent.
-	// More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-	// +optional
-	Name string `json:"name,omitempty"`
 	// UID of the referent.
 	// More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
 	// +optional
 	UID types.UID `json:"uid,omitempty"`
+	// Reference to the resource.
+	// +optional
+	ResourceRef ResourceRef `json:"resourceRef,omitempty"`
+	// Selector to the resource.
+	// +optional
+	ResourceSelector ResourceSelector `json:"resourceSelector,omitempty"`
 }

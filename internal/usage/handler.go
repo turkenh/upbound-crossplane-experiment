@@ -58,7 +58,10 @@ func SetupWebhookWithManager(mgr ctrl.Manager, options controller.Options) error
 	indexer := mgr.GetFieldIndexer()
 	if err := indexer.IndexField(context.Background(), &v1alpha1.Usage{}, inUseIndexKey, func(obj client.Object) []string {
 		u := obj.(*v1alpha1.Usage)
-		return []string{fmt.Sprintf("%s.%s.%s", u.Spec.Of.APIVersion, u.Spec.Of.Kind, u.Spec.Of.Name)}
+		if u.Spec.Of.ResourceRef.Name == "" {
+			return []string{}
+		}
+		return []string{fmt.Sprintf("%s.%s.%s", u.Spec.Of.APIVersion, u.Spec.Of.Kind, u.Spec.Of.ResourceRef.Name)}
 	}); err != nil {
 		return err
 	}
@@ -100,7 +103,7 @@ func (h *handler) validateNoUsages(ctx context.Context, u *unstructured.Unstruct
 				Allowed: false,
 				Result: &metav1.Status{
 					Code:   int32(http.StatusConflict),
-					Reason: metav1.StatusReason(fmt.Sprintf("The resource is used by %d resources, including %s/%s", len(usageList.Items), usageList.Items[0].Spec.By.Kind, usageList.Items[0].Spec.By.Name)),
+					Reason: metav1.StatusReason(fmt.Sprintf("The resource is used by %d resources, including %s/%s", len(usageList.Items), usageList.Items[0].Spec.By.Kind, usageList.Items[0].Spec.By.ResourceRef.Name)),
 				},
 			},
 		}
