@@ -19,6 +19,7 @@ package usage
 
 import (
 	"context"
+	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	"strings"
 	"time"
 
@@ -56,6 +57,7 @@ const (
 	errAddLabelAndOwnersToUsed = "cannot update used resource with added label and owners"
 	errRemoveOwnerFromUsed     = "cannot update used resource with owner ref removed"
 	errRemoveFinalizer         = "cannot remove composite resource finalizer"
+	errUpdateStatus            = "cannot update status of usage"
 )
 
 // Event reasons.
@@ -280,6 +282,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 		}
 	}
 
+	// Note(turkenh): Do we really need a Synced condition? Maybe just to be
+	// consistent with the other XP resources.
+	u.Status.SetConditions(xpv1.ReconcileSuccess())
+	u.Status.SetConditions(xpv1.Available())
 	r.record.Event(u, event.Normal(reasonUsageConfigured, "Usage configured successfully."))
-	return reconcile.Result{}, nil
+	return reconcile.Result{}, errors.Wrap(r.client.Status().Update(ctx, u), errUpdateStatus)
 }

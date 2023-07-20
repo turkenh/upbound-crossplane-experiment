@@ -17,43 +17,9 @@ limitations under the License.
 package v1alpha1
 
 import (
+	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
-
-// +kubebuilder:object:root=true
-// +kubebuilder:storageversion
-// +genclient
-// +genclient:nonNamespaced
-
-// A Usage defines a deletion blocking relationship between two resources.
-// +kubebuilder:printcolumn:name="AGE",type="date",JSONPath=".metadata.creationTimestamp"
-// +kubebuilder:resource:scope=Cluster,categories=crossplane
-type Usage struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
-
-	// The data of this Usage.
-	// This may contain any kind of structure that can be serialized into JSON.
-	// +optional
-	Spec UsageSpec `json:"spec"`
-}
-
-// +kubebuilder:object:root=true
-
-// UsageList contains a list of Usage.
-type UsageList struct {
-	metav1.TypeMeta `json:",inline"`
-	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []Usage `json:"items"`
-}
-
-// UsageSpec defines the desired state of Usage.
-type UsageSpec struct {
-	// Of is the resource that is "being used".
-	Of Resource `json:"of"`
-	// By is the resource that is "using the other resource".
-	By Resource `json:"by"`
-}
 
 // ResourceRef is a reference to a resource.
 type ResourceRef struct {
@@ -87,4 +53,46 @@ type Resource struct {
 	// Selector to the resource.
 	// +optional
 	ResourceSelector ResourceSelector `json:"resourceSelector,omitempty"`
+}
+
+// UsageSpec defines the desired state of Usage.
+type UsageSpec struct {
+	// Of is the resource that is "being used".
+	Of Resource `json:"of"`
+	// By is the resource that is "using the other resource".
+	By Resource `json:"by"`
+}
+
+type UsageStatus struct {
+	xpv1.ConditionedStatus `json:",inline"`
+}
+
+// A Usage defines a deletion blocking relationship between two resources.
+// +kubebuilder:object:root=true
+// +kubebuilder:storageversion
+// +kubebuilder:printcolumn:name="OF",type="string",JSONPath=".spec.of.resourceRef.name"
+// +kubebuilder:printcolumn:name="BY",type="string",JSONPath=".spec.by.resourceRef.name"
+// +kubebuilder:printcolumn:name="SYNCED",type="string",JSONPath=".status.conditions[?(@.type=='Synced')].status"
+// +kubebuilder:printcolumn:name="READY",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
+// +kubebuilder:printcolumn:name="AGE",type="date",JSONPath=".metadata.creationTimestamp"
+// +kubebuilder:resource:scope=Cluster,categories=crossplane
+// +kubebuilder:subresource:status
+type Usage struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	// The data of this Usage.
+	// This may contain any kind of structure that can be serialized into JSON.
+	// +optional
+	Spec   UsageSpec   `json:"spec"`
+	Status UsageStatus `json:"status,omitempty"`
+}
+
+// +kubebuilder:object:root=true
+
+// UsageList contains a list of Usage.
+type UsageList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+	Items           []Usage `json:"items"`
 }
