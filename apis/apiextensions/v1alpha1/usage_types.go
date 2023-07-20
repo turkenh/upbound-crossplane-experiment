@@ -18,7 +18,6 @@ package v1alpha1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 )
 
 // +kubebuilder:object:root=true
@@ -82,10 +81,6 @@ type Resource struct {
 	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
 	// +optional
 	Kind string `json:"kind,omitempty"`
-	// UID of the referent.
-	// More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
-	// +optional
-	UID types.UID `json:"uid,omitempty"`
 	// Reference to the resource.
 	// +optional
 	ResourceRef ResourceRef `json:"resourceRef,omitempty"`
