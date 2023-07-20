@@ -48,17 +48,22 @@ type UsageList struct {
 	Items           []Usage `json:"items"`
 }
 
+// UsageSpec defines the desired state of Usage.
 type UsageSpec struct {
+	// Of is the resource that is "being used".
 	Of Resource `json:"of"`
+	// By is the resource that is "using the other resource".
 	By Resource `json:"by"`
 }
 
+// ResourceRef is a reference to a resource.
 type ResourceRef struct {
 	// Name of the referent.
 	// +optional
 	Name string `json:"name,omitempty"`
 }
 
+// ResourceSelector is a selector to a resource.
 type ResourceSelector struct {
 	// MatchLabels ensures an object with matching labels is selected.
 	MatchLabels map[string]string `json:"matchLabels,omitempty"`
@@ -68,6 +73,7 @@ type ResourceSelector struct {
 	MatchControllerRef *bool `json:"matchControllerRef,omitempty"`
 }
 
+// Resource defines a cluster-scoped resource.
 type Resource struct {
 	// API version of the referent.
 	// +optional

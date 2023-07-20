@@ -40,6 +40,8 @@ import (
 	"github.com/crossplane/crossplane/apis/apiextensions/v1alpha1"
 	apiextensionscontroller "github.com/crossplane/crossplane/internal/controller/apiextensions/controller"
 	"github.com/crossplane/crossplane/internal/controller/apiextensions/usage/dependency"
+	"github.com/crossplane/crossplane/internal/usage"
+	"github.com/crossplane/crossplane/internal/xcrd"
 )
 
 const (
@@ -47,18 +49,20 @@ const (
 	finalizer     = "usage.apiextensions.crossplane.io"
 	inUseLabelKey = "crossplane.io/in-use"
 
-	errGetUsage        = "cannot get usage"
-	errGetUsing        = "cannot get using"
-	errGetUsed         = "cannot get used"
-	errAddInUseLabel   = "cannot add inuse label and owner reference"
-	errRemoveFinalizer = "cannot remove composite resource finalizer"
+	errGetUsage                = "cannot get usage"
+	errListUsages              = "cannot list usages"
+	errGetUsing                = "cannot get using"
+	errGetUsed                 = "cannot get used"
+	errAddOwnerToUsage         = "cannot update usage resource with owner ref"
+	errAddLabelAndOwnersToUsed = "cannot update used resource with added label and owners"
+	errRemoveOwnerFromUsed     = "cannot update used resource with owner ref removed"
+	errRemoveFinalizer         = "cannot remove composite resource finalizer"
 )
 
 // Setup adds a controller that reconciles Usages by
 // defining a composite resource and starting a controller to reconcile it.
 func Setup(mgr ctrl.Manager, o apiextensionscontroller.Options) error {
 	name := "usage/" + strings.ToLower(v1alpha1.UsageGroupKind)
-
 	r := NewReconciler(mgr,
 		WithLogger(o.Logger.WithValues("controller", name)),
 		WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name))))
@@ -128,10 +132,8 @@ type Reconciler struct {
 
 // Reconcile a Usage by defining a new kind of composite
 // resource and starting a controller to reconcile it.
-func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
+func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) { //nolint:gocyclo // Reconcilers are typically complex.
 	log := r.log.WithValues("request", req)
-	log.Debug("Reconciling Usage")
-
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
@@ -158,6 +160,14 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 		UID:        u.Spec.By.UID,
 	}))
 
+	// Identify used resource as an unstructured object.
+	used := dependency.New(dependency.FromReference(v1.ObjectReference{
+		Kind:       u.Spec.Of.Kind,
+		Name:       u.Spec.Of.ResourceRef.Name,
+		APIVersion: u.Spec.Of.APIVersion,
+		UID:        u.Spec.Of.UID,
+	}))
+
 	if meta.WasDeleted(u) {
 		// Get the using resource
 		err := r.client.Get(ctx, client.ObjectKey{Name: u.Spec.By.ResourceRef.Name}, using)
@@ -165,15 +175,39 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 			log.Debug(errGetUsing, "error", err)
 			return reconcile.Result{}, errors.Wrap(resource.IgnoreNotFound(err), errGetUsing)
 		}
-		if err == nil {
-			// If the using resource is not deleted, we must wait for it to be deleted
+
+		if l := u.GetLabels()[xcrd.LabelKeyNamePrefixForComposed]; len(l) > 0 && l == using.GetLabels()[xcrd.LabelKeyNamePrefixForComposed] && err == nil {
+			// If the usage and using resource are part of the same composite resource, we need to wait for the using resource to be deleted
 			log.Debug("Using resource is not deleted, waiting")
 			return reconcile.Result{RequeueAfter: 1 * time.Minute}, nil
 		}
-		// Using resource is deleted, we can proceed with the deletion of the usage
+		// Using resource is deleted or not part of the same composite, we can
+		// proceed with the deletion of the usage.
 
-		// TODO(turkenh): Remove the in-use label from the used resource if
-		//  there are no other usages referencing it.
+		// Get the used resource
+		if err = r.client.Get(ctx, client.ObjectKey{Name: u.Spec.Of.ResourceRef.Name}, used); resource.IgnoreNotFound(err) != nil {
+			log.Debug(errGetUsed, "error", err)
+			return reconcile.Result{}, errors.Wrap(err, errGetUsed)
+		}
+
+		// Remove the owner reference from the used resource if it exists
+		if err == nil && used.OwnedBy(u.GetUID()) {
+			used.RemoveOwnerRef(u.GetUID())
+			usageList := &v1alpha1.UsageList{}
+			if err := r.client.List(ctx, usageList, client.MatchingFields{usage.InUseIndexKey: usage.IndexValueForObject(used.GetUnstructured())}); err != nil {
+				log.Debug(errListUsages, "error", err)
+				return reconcile.Result{}, errors.Wrap(err, errListUsages)
+			}
+			// There are no "other" Usage's referencing the used resource,
+			// so we can remove the in-use label from the used resource
+			if len(usageList.Items) < 2 {
+				meta.RemoveLabels(used, inUseLabelKey)
+			}
+			if err = r.client.Update(ctx, used); err != nil {
+				log.Debug(errRemoveOwnerFromUsed, "error", err)
+				return reconcile.Result{}, errors.Wrap(err, errRemoveOwnerFromUsed)
+			}
+		}
 
 		// Remove the finalizer from the usage
 		if err = r.usage.RemoveFinalizer(ctx, u); err != nil {
@@ -198,18 +232,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 		)})
 		u.Spec.By.UID = using.GetUID()
 		if err := r.client.Update(ctx, u); err != nil {
-			log.Debug(errAddInUseLabel, "error", err)
-			return reconcile.Result{}, err
+			log.Debug(errAddOwnerToUsage, "error", err)
+			return reconcile.Result{}, errors.Wrap(err, errAddOwnerToUsage)
 		}
 	}
-
-	// Identify used resource as an unstructured object.
-	used := dependency.New(dependency.FromReference(v1.ObjectReference{
-		Kind:       u.Spec.Of.Kind,
-		Name:       u.Spec.Of.ResourceRef.Name,
-		APIVersion: u.Spec.Of.APIVersion,
-		UID:        u.Spec.Of.UID,
-	}))
 
 	// Get the used resource
 	if err := r.client.Get(ctx, client.ObjectKey{Name: u.Spec.Of.ResourceRef.Name}, used); err != nil {
@@ -233,8 +259,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 		o = append(o, meta.AsOwner(meta.TypedReferenceTo(u, u.GetObjectKind().GroupVersionKind())))
 		used.SetOwnerReferences(o)
 		if err := r.client.Update(ctx, used); err != nil {
-			log.Debug(errAddInUseLabel, "error", err)
-			return reconcile.Result{}, err
+			log.Debug(errAddLabelAndOwnersToUsed, "error", err)
+			return reconcile.Result{}, errors.Wrap(err, errAddLabelAndOwnersToUsed)
 		}
 	}
 

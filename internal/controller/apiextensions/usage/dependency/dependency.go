@@ -56,6 +56,7 @@ func (cr *Unstructured) GetUnstructured() *unstructured.Unstructured {
 	return &cr.Unstructured
 }
 
+// OwnedBy returns true if the supplied UID is an owner of the composed
 func (cr *Unstructured) OwnedBy(u types.UID) bool {
 	for _, owner := range cr.GetOwnerReferences() {
 		if owner.UID == u {
@@ -63,4 +64,15 @@ func (cr *Unstructured) OwnedBy(u types.UID) bool {
 		}
 	}
 	return false
+}
+
+// RemoveOwnerRef removes the supplied UID from the composed resource's owner
+func (cr *Unstructured) RemoveOwnerRef(u types.UID) {
+	refs := cr.GetOwnerReferences()
+	for i := range refs {
+		if refs[i].UID == u {
+			cr.SetOwnerReferences(append(refs[:i], refs[i+1:]...))
+			return
+		}
+	}
 }

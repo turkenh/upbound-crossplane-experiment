@@ -5,9 +5,9 @@ metadata:
 spec:
   forProvider:
     conditionAfter:
-      - conditionType: "Ready"
+      - conditionType: "Synced"
         conditionStatus: "True"
         time: "5s"
-      - conditionType: "Synced"
+      - conditionType: "Ready"
         conditionStatus: "True"
         time: "10s"
