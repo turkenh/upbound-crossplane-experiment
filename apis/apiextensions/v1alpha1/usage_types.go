@@ -85,10 +85,7 @@ type UsageStatus struct {
 type Usage struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
-
-	// The data of this Usage.
-	// This may contain any kind of structure that can be serialized into JSON.
-	// +optional
+	// +kubebuilder:validation:XValidation:rule="has(self.by) || has(self.reason)",message="either \"spec.by\" or \"spec.reason\" must be specified."
 	Spec   UsageSpec   `json:"spec"`
 	Status UsageStatus `json:"status,omitempty"`
 }

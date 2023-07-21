@@ -57,11 +57,11 @@ func (r *apiSelectorResolver) resolveSelector(ctx context.Context, u *v1alpha1.U
 	}))
 
 	if err := r.client.List(ctx, l, client.MatchingLabels(rs.ResourceSelector.MatchLabels)); err != nil {
-		return errors.Wrap(err, "cannot list resources matching selector")
+		return errors.Wrap(err, "cannot list resources matching labels")
 	}
 
 	if len(l.Items) == 0 {
-		return errors.Errorf("no resources found matching selector")
+		return errors.Errorf("no %q found matching labels: %q", rs.Kind, rs.ResourceSelector.MatchLabels)
 	}
 
 	for i := range l.Items {

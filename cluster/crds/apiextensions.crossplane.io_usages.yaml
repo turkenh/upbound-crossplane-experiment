@@ -50,8 +50,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: The data of this Usage. This may contain any kind of structure
-              that can be serialized into JSON.
+            description: UsageSpec defines the desired state of Usage.
             properties:
               by:
                 description: By is the resource that is "using the other resource".
@@ -125,6 +124,9 @@ spec:
             required:
             - of
             type: object
+            x-kubernetes-validations:
+            - message: either "spec.by" or "spec.reason" must be specified.
+              rule: has(self.by) || has(self.reason)
           status:
             description: UsageStatus defines the observed state of Usage.
             properties:
@@ -162,6 +164,8 @@ spec:
                   type: object
                 type: array
             type: object
+        required:
+        - spec
         type: object
     served: true
     storage: true

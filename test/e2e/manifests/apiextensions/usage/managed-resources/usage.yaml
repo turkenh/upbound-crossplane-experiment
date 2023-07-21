@@ -9,8 +9,4 @@ spec:
     resourceSelector:
         matchLabels:
             foo: bar
-  by:
-    apiVersion: nop.crossplane.io/v1alpha1
-    kind: NopResource
-    resourceRef:
-      name: using-resource
+  reason: "Testing usage of a used resource"
