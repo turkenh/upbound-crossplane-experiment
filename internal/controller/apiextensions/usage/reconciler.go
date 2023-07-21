@@ -57,7 +57,8 @@ const (
 	errAddOwnerToUsage         = "cannot update usage resource with owner ref"
 	errAddLabelAndOwnersToUsed = "cannot update used resource with added label and owners"
 	errRemoveOwnerFromUsed     = "cannot update used resource with owner ref removed"
-	errRemoveFinalizer         = "cannot remove composite resource finalizer"
+	errAddFinalizer            = "cannot add finalizer"
+	errRemoveFinalizer         = "cannot remove finalizer"
 	errUpdateStatus            = "cannot update status of usage"
 )
 
@@ -70,6 +71,7 @@ const (
 	reasonOwnerRefToUsage        event.Reason = "AddOwnerRefToUsage"
 	reasonOwnerRefToUsed         event.Reason = "AddOwnerRefToUsed"
 	reasonRemoveOwnerRefFromUsed event.Reason = "RemoveOwnerRefFromUsed"
+	reasonAddFinalizer           event.Reason = "AddFinalizer"
 	reasonRemoveFinalizer        event.Reason = "RemoveFinalizer"
 
 	reasonUsageConfigured event.Reason = "UsageConfigured"
@@ -178,42 +180,50 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 
 	r.record.Event(u, event.Normal(reasonResolveSelectors, "Selectors resolved, if any."))
 
-	// Identify using resource as an unstructured object.
-	using := dependency.New(dependency.FromReference(v1.ObjectReference{
-		Kind:       u.Spec.By.Kind,
-		Name:       u.Spec.By.ResourceRef.Name,
-		APIVersion: u.Spec.By.APIVersion,
-	}))
+	of := u.Spec.Of
+	by := u.Spec.By
 
 	// Identify used resource as an unstructured object.
 	used := dependency.New(dependency.FromReference(v1.ObjectReference{
-		Kind:       u.Spec.Of.Kind,
-		Name:       u.Spec.Of.ResourceRef.Name,
-		APIVersion: u.Spec.Of.APIVersion,
+		Kind:       of.Kind,
+		Name:       of.ResourceRef.Name,
+		APIVersion: of.APIVersion,
 	}))
 
 	if meta.WasDeleted(u) {
-		// Get the using resource
-		err := r.client.Get(ctx, client.ObjectKey{Name: u.Spec.By.ResourceRef.Name}, using)
-		if resource.IgnoreNotFound(err) != nil {
-			log.Debug(errGetUsing, "error", err)
-			err = errors.Wrap(resource.IgnoreNotFound(err), errGetUsing)
-			r.record.Event(u, event.Warning(reasonGetUsing, err))
-			return reconcile.Result{}, err
-		}
+		if by != nil {
+			// Identify using resource as an unstructured object.
+			using := dependency.New(dependency.FromReference(v1.ObjectReference{
+				Kind:       by.Kind,
+				Name:       by.ResourceRef.Name,
+				APIVersion: by.APIVersion,
+			}))
+			// Get the using resource
+			err := r.client.Get(ctx, client.ObjectKey{Name: by.ResourceRef.Name}, using)
+			if resource.IgnoreNotFound(err) != nil {
+				log.Debug(errGetUsing, "error", err)
+				err = errors.Wrap(resource.IgnoreNotFound(err), errGetUsing)
+				r.record.Event(u, event.Warning(reasonGetUsing, err))
+				return reconcile.Result{}, err
+			}
 
-		if l := u.GetLabels()[xcrd.LabelKeyNamePrefixForComposed]; len(l) > 0 && l == using.GetLabels()[xcrd.LabelKeyNamePrefixForComposed] && err == nil {
-			// If the usage and using resource are part of the same composite resource, we need to wait for the using resource to be deleted
-			msg := "Waiting for using resource to be deleted."
-			log.Debug(msg)
-			r.record.Event(u, event.Normal(reasonWaitUsing, msg))
-			return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+			if l := u.GetLabels()[xcrd.LabelKeyNamePrefixForComposed]; len(l) > 0 && l == using.GetLabels()[xcrd.LabelKeyNamePrefixForComposed] && err == nil {
+				// If the usage and using resource are part of the same composite resource, we need to wait for the using resource to be deleted
+				msg := "Waiting for using resource to be deleted."
+				log.Debug(msg)
+				r.record.Event(u, event.Normal(reasonWaitUsing, msg))
+				return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+			}
 		}
-		// Using resource is deleted or not part of the same composite, we can
-		// proceed with the deletion of the usage.
+		// At this point using resource is either:
+		// - not defined
+		// - not found (deleted)
+		// - not part of the same composite resource
+		// So, we can proceed with the deletion of the usage.
 
 		// Get the used resource
-		if err = r.client.Get(ctx, client.ObjectKey{Name: u.Spec.Of.ResourceRef.Name}, used); resource.IgnoreNotFound(err) != nil {
+		var err error
+		if err = r.client.Get(ctx, client.ObjectKey{Name: of.ResourceRef.Name}, used); resource.IgnoreNotFound(err) != nil {
 			log.Debug(errGetUsed, "error", err)
 			err = errors.Wrap(err, errGetUsed)
 			r.record.Event(u, event.Warning(reasonGetUsed, err))
@@ -254,30 +264,16 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 		return reconcile.Result{}, nil
 	}
 
-	// Get the using resource
-	if err := r.client.Get(ctx, client.ObjectKey{Name: u.Spec.By.ResourceRef.Name}, using); err != nil {
-		log.Debug(errGetUsing, "error", err)
-		err = errors.Wrap(err, errGetUsing)
-		r.record.Event(u, event.Warning(reasonGetUsing, err))
-		return reconcile.Result{}, err
-	}
-
-	// usageResource should have a finalizer and be owned by the using resource.
-	if owners := u.GetOwnerReferences(); len(owners) == 0 || owners[0].UID != using.GetUID() {
-		meta.AddFinalizer(u, finalizer)
-		meta.AddOwnerReference(u, meta.AsOwner(
-			meta.TypedReferenceTo(using, using.GetObjectKind().GroupVersionKind()),
-		))
-		if err := r.client.Update(ctx, u); err != nil {
-			log.Debug(errAddOwnerToUsage, "error", err)
-			err = errors.Wrap(err, errAddOwnerToUsage)
-			r.record.Event(u, event.Warning(reasonOwnerRefToUsage, err))
-			return reconcile.Result{}, err
-		}
+	// Add finalizer for Usage resource.
+	if err := r.usage.AddFinalizer(ctx, u); err != nil {
+		log.Debug(errAddFinalizer, "error", err)
+		err = errors.Wrap(err, errAddFinalizer)
+		r.record.Event(u, event.Warning(reasonAddFinalizer, err))
+		return reconcile.Result{}, nil
 	}
 
 	// Get the used resource
-	if err := r.client.Get(ctx, client.ObjectKey{Name: u.Spec.Of.ResourceRef.Name}, used); err != nil {
+	if err := r.client.Get(ctx, client.ObjectKey{Name: of.ResourceRef.Name}, used); err != nil {
 		log.Debug(errGetUsed, "error", err)
 		err = errors.Wrap(err, errGetUsed)
 		r.record.Event(u, event.Warning(reasonGetUsed, err))
@@ -295,6 +291,36 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 			err = errors.Wrap(err, errAddLabelAndOwnersToUsed)
 			r.record.Event(u, event.Warning(reasonOwnerRefToUsed, err))
 			return reconcile.Result{}, err
+		}
+	}
+
+	if by != nil {
+		// Identify using resource as an unstructured object.
+		using := dependency.New(dependency.FromReference(v1.ObjectReference{
+			Kind:       by.Kind,
+			Name:       by.ResourceRef.Name,
+			APIVersion: by.APIVersion,
+		}))
+
+		// Get the using resource
+		if err := r.client.Get(ctx, client.ObjectKey{Name: by.ResourceRef.Name}, using); err != nil {
+			log.Debug(errGetUsing, "error", err)
+			err = errors.Wrap(err, errGetUsing)
+			r.record.Event(u, event.Warning(reasonGetUsing, err))
+			return reconcile.Result{}, err
+		}
+
+		// usageResource should have a finalizer and be owned by the using resource.
+		if owners := u.GetOwnerReferences(); len(owners) == 0 || owners[0].UID != using.GetUID() {
+			meta.AddOwnerReference(u, meta.AsOwner(
+				meta.TypedReferenceTo(using, using.GetObjectKind().GroupVersionKind()),
+			))
+			if err := r.client.Update(ctx, u); err != nil {
+				log.Debug(errAddOwnerToUsage, "error", err)
+				err = errors.Wrap(err, errAddOwnerToUsage)
+				r.record.Event(u, event.Warning(reasonOwnerRefToUsage, err))
+				return reconcile.Result{}, err
+			}
 		}
 	}
 

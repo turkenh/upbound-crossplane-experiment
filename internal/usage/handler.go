@@ -125,7 +125,7 @@ func (h *Handler) validateNoUsages(ctx context.Context, u *unstructured.Unstruct
 		return admission.Errored(http.StatusInternalServerError, err)
 	}
 	if len(usageList.Items) > 0 {
-		msg := fmt.Sprintf("The resource is in-use by %d resource(s), including %s/%s", len(usageList.Items), usageList.Items[0].Spec.By.Kind, usageList.Items[0].Spec.By.ResourceRef.Name)
+		msg := inUseMessage(usageList)
 		h.log.Debug("Usage found, deletion not allowed", "apiVersion", u.GetAPIVersion(), "kind", u.GetKind(), "name", u.GetName(), "msg", msg)
 		return admission.Response{
 			AdmissionResponse: admissionv1.AdmissionResponse{
@@ -139,4 +139,17 @@ func (h *Handler) validateNoUsages(ctx context.Context, u *unstructured.Unstruct
 	}
 	h.log.Debug("No usage found, deletion allowed", "apiVersion", u.GetAPIVersion(), "kind", u.GetKind(), "name", u.GetName())
 	return admission.Allowed("")
+}
+
+func inUseMessage(usages *v1alpha1.UsageList) string {
+	first := usages.Items[0]
+	if first.Spec.By != nil {
+		return fmt.Sprintf("This resource is in-use by %d Usage(s), including the Usage %q by resource %s/%s.", len(usages.Items), first.Name, first.Spec.By.Kind, first.Spec.By.ResourceRef.Name)
+	}
+	if first.Spec.Reason != nil {
+		return fmt.Sprintf("This resource is in-use by %d Usage(s), including the Usage %q with reason: %q.", len(usages.Items), first.Name, *first.Spec.Reason)
+	}
+	// Either spec.by or spec.reason should be set, which we enforce with a CEL
+	// rule. This is just a fallback.
+	return fmt.Sprintf("This resource is in-use by %d Usage(s), including the Usage %q.", len(usages.Items), first.Name)
 }

@@ -34,6 +34,9 @@ func (r *apiSelectorResolver) resolveSelectors(ctx context.Context, u *v1alpha1.
 			return errors.Wrap(err, "cannot resolve selector for used resource")
 		}
 		u.Spec.Of = of
+		if err := r.client.Update(ctx, u); err != nil {
+			return errors.Wrap(err, "cannot update usage after resolving selector for used resource")
+		}
 	}
 
 	if by == nil {
@@ -45,6 +48,9 @@ func (r *apiSelectorResolver) resolveSelectors(ctx context.Context, u *v1alpha1.
 			return errors.Wrap(err, "cannot resolve selector for using resource")
 		}
 		u.Spec.By = by
+		if err := r.client.Update(ctx, u); err != nil {
+			return errors.Wrap(err, "cannot update usage after resolving selector for using resource")
+		}
 	}
 
 	return nil
