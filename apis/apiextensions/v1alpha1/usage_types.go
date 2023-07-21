@@ -17,15 +17,15 @@ limitations under the License.
 package v1alpha1
 
 import (
-	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 )
 
 // ResourceRef is a reference to a resource.
 type ResourceRef struct {
 	// Name of the referent.
-	// +optional
-	Name string `json:"name,omitempty"`
+	Name string `json:"name"`
 }
 
 // ResourceSelector is a selector to a resource.
@@ -49,10 +49,10 @@ type Resource struct {
 	Kind string `json:"kind,omitempty"`
 	// Reference to the resource.
 	// +optional
-	ResourceRef ResourceRef `json:"resourceRef,omitempty"`
+	ResourceRef *ResourceRef `json:"resourceRef,omitempty"`
 	// Selector to the resource.
 	// +optional
-	ResourceSelector ResourceSelector `json:"resourceSelector,omitempty"`
+	ResourceSelector *ResourceSelector `json:"resourceSelector,omitempty"`
 }
 
 // UsageSpec defines the desired state of Usage.
@@ -60,9 +60,14 @@ type UsageSpec struct {
 	// Of is the resource that is "being used".
 	Of Resource `json:"of"`
 	// By is the resource that is "using the other resource".
-	By Resource `json:"by"`
+	// +optional
+	By *Resource `json:"by,omitempty"`
+	// Reason is the reason for blocking deletion of the resource.
+	// +optional
+	Reason *string `json:"reason,omitempty"`
 }
 
+// UsageStatus defines the observed state of Usage.
 type UsageStatus struct {
 	xpv1.ConditionedStatus `json:",inline"`
 }

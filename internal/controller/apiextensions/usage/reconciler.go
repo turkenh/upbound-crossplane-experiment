@@ -14,12 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package usage manages the lifecycle of Usage objects.
+// Package usage manages the lifecycle of usageResource objects.
 package usage
 
 import (
 	"context"
-	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	"strings"
 	"time"
 
@@ -29,6 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	"github.com/crossplane/crossplane-runtime/pkg/errors"
 	"github.com/crossplane/crossplane-runtime/pkg/event"
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
@@ -50,6 +50,7 @@ const (
 	inUseLabelKey = "crossplane.io/in-use"
 
 	errGetUsage                = "cannot get usage"
+	errResolveSelectors        = "cannot resolve selectors"
 	errListUsages              = "cannot list usages"
 	errGetUsing                = "cannot get using"
 	errGetUsed                 = "cannot get used"
@@ -62,7 +63,7 @@ const (
 
 // Event reasons.
 const (
-	reasonGetUsage               event.Reason = "GetUsage"
+	reasonResolveSelectors       event.Reason = "ResolveSelectors"
 	reasonListUsages             event.Reason = "ListUsages"
 	reasonGetUsed                event.Reason = "GetUsedResource"
 	reasonGetUsing               event.Reason = "GetUsingResource"
@@ -107,6 +108,11 @@ func WithRecorder(er event.Recorder) ReconcilerOption {
 	}
 }
 
+type usageResource struct {
+	resource.Finalizer
+	selectorResolver
+}
+
 // NewReconciler returns a Reconciler of Usages.
 func NewReconciler(mgr manager.Manager, opts ...ReconcilerOption) *Reconciler {
 	kube := unstructured.NewClient(mgr.GetClient())
@@ -119,7 +125,10 @@ func NewReconciler(mgr manager.Manager, opts ...ReconcilerOption) *Reconciler {
 			Applicator: resource.NewAPIUpdatingApplicator(kube),
 		},
 
-		usage: resource.NewAPIFinalizer(kube, finalizer),
+		usage: usageResource{
+			Finalizer:        resource.NewAPIFinalizer(kube, finalizer),
+			selectorResolver: newAPISelectorResolver(kube),
+		},
 
 		log:    logging.NewNopLogger(),
 		record: event.NewNopRecorder(),
@@ -138,7 +147,7 @@ type Reconciler struct {
 	client resource.ClientApplicator
 	mgr    manager.Manager
 
-	usage resource.Finalizer
+	usage usageResource
 
 	log    logging.Logger
 	record event.Recorder
@@ -146,21 +155,28 @@ type Reconciler struct {
 	pollInterval time.Duration
 }
 
-// Reconcile a Usage by defining a new kind of composite
+// Reconcile a usageResource by defining a new kind of composite
 // resource and starting a controller to reconcile it.
 func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) { //nolint:gocyclo // Reconcilers are typically complex.
 	log := r.log.WithValues("request", req)
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	// Get the Usage resource for this request.
+	// Get the usageResource resource for this request.
 	u := &v1alpha1.Usage{}
 	if err := r.client.Get(ctx, req.NamespacedName, u); err != nil {
 		log.Debug(errGetUsage, "error", err)
 		return reconcile.Result{}, errors.Wrap(resource.IgnoreNotFound(err), errGetUsage)
 	}
 
-	// TODO(turkenh): Resolve selectors.
+	if err := r.usage.resolveSelectors(ctx, u); err != nil {
+		log.Debug(errResolveSelectors, "error", err)
+		err = errors.Wrap(err, errResolveSelectors)
+		r.record.Event(u, event.Warning(reasonResolveSelectors, err))
+		return reconcile.Result{}, err
+	}
+
+	r.record.Event(u, event.Normal(reasonResolveSelectors, "Selectors resolved, if any."))
 
 	// Identify using resource as an unstructured object.
 	using := dependency.New(dependency.FromReference(v1.ObjectReference{
@@ -190,7 +206,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 			// If the usage and using resource are part of the same composite resource, we need to wait for the using resource to be deleted
 			msg := "Waiting for using resource to be deleted."
 			log.Debug(msg)
-			r.record.Event(u, event.Normal(reasonUsageConfigured, msg))
+			r.record.Event(u, event.Normal(reasonWaitUsing, msg))
 			return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
 		}
 		// Using resource is deleted or not part of the same composite, we can
@@ -214,7 +230,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 				r.record.Event(u, event.Warning(reasonListUsages, err))
 				return reconcile.Result{}, errors.Wrap(err, errListUsages)
 			}
-			// There are no "other" Usage's referencing the used resource,
+			// There are no "other" usageResource's referencing the used resource,
 			// so we can remove the in-use label from the used resource
 			if len(usageList.Items) < 2 {
 				meta.RemoveLabels(used, inUseLabelKey)
@@ -246,7 +262,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 		return reconcile.Result{}, err
 	}
 
-	// Usage should have a finalizer and be owned by the using resource.
+	// usageResource should have a finalizer and be owned by the using resource.
 	if owners := u.GetOwnerReferences(); len(owners) == 0 || owners[0].UID != using.GetUID() {
 		meta.AddFinalizer(u, finalizer)
 		meta.AddOwnerReference(u, meta.AsOwner(
@@ -268,7 +284,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 		return reconcile.Result{}, err
 	}
 
-	// Used resource should have in-use label and be owned by the Usage resource.
+	// Used resource should have in-use label and be owned by the usageResource resource.
 	if used.GetLabels()[inUseLabelKey] != "true" || !used.OwnedBy(u.GetUID()) {
 		meta.AddLabels(used, map[string]string{inUseLabelKey: "true"})
 		meta.AddOwnerReference(used, meta.AsOwner(

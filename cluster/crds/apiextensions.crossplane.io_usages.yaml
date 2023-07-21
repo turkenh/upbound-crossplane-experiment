@@ -68,6 +68,8 @@ spec:
                       name:
                         description: Name of the referent.
                         type: string
+                    required:
+                    - name
                     type: object
                   resourceSelector:
                     description: Selector to the resource.
@@ -99,6 +101,8 @@ spec:
                       name:
                         description: Name of the referent.
                         type: string
+                    required:
+                    - name
                     type: object
                   resourceSelector:
                     description: Selector to the resource.
@@ -115,11 +119,14 @@ spec:
                         type: object
                     type: object
                 type: object
+              reason:
+                description: Reason is the reason for blocking deletion of the resource.
+                type: string
             required:
-            - by
             - of
             type: object
           status:
+            description: UsageStatus defines the observed state of Usage.
             properties:
               conditions:
                 description: Conditions of the resource.

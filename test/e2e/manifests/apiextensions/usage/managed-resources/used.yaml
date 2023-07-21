@@ -2,6 +2,8 @@ apiVersion: nop.crossplane.io/v1alpha1
 kind: NopResource
 metadata:
   name: used-resource
+  labels:
+    foo: bar
 spec:
   forProvider:
     conditionAfter:

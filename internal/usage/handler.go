@@ -54,7 +54,7 @@ func SetupWebhookWithManager(mgr ctrl.Manager, options controller.Options) error
 	indexer := mgr.GetFieldIndexer()
 	if err := indexer.IndexField(context.Background(), &v1alpha1.Usage{}, InUseIndexKey, func(obj client.Object) []string {
 		u := obj.(*v1alpha1.Usage)
-		if u.Spec.Of.ResourceRef.Name == "" {
+		if u.Spec.Of.ResourceRef == nil || len(u.Spec.Of.ResourceRef.Name) == 0 {
 			return []string{}
 		}
 		return []string{fmt.Sprintf("%s.%s.%s", u.Spec.Of.APIVersion, u.Spec.Of.Kind, u.Spec.Of.ResourceRef.Name)}
