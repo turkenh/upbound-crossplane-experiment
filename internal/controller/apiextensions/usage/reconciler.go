@@ -45,34 +45,37 @@ import (
 )
 
 const (
-	timeout       = 2 * time.Minute
-	finalizer     = "usage.apiextensions.crossplane.io"
+	timeout   = 2 * time.Minute
+	finalizer = "usage.apiextensions.crossplane.io"
+	// Note(turkenh): In-use label enables the "DELETE" requests on resources
+	// with this label to be intercepted by the webhook and rejected if the
+	// resource is in use.
 	inUseLabelKey = "crossplane.io/in-use"
 
-	errGetUsage                = "cannot get usage"
-	errResolveSelectors        = "cannot resolve selectors"
-	errListUsages              = "cannot list usages"
-	errGetUsing                = "cannot get using"
-	errGetUsed                 = "cannot get used"
-	errAddOwnerToUsage         = "cannot update usage resource with owner ref"
-	errAddLabelAndOwnersToUsed = "cannot update used resource with added label and owners"
-	errRemoveOwnerFromUsed     = "cannot update used resource with owner ref removed"
-	errAddFinalizer            = "cannot add finalizer"
-	errRemoveFinalizer         = "cannot remove finalizer"
-	errUpdateStatus            = "cannot update status of usage"
+	errGetUsage         = "cannot get usage"
+	errResolveSelectors = "cannot resolve selectors"
+	errListUsages       = "cannot list usages"
+	errGetUsing         = "cannot get using"
+	errGetUsed          = "cannot get used"
+	errAddOwnerToUsage  = "cannot update usage resource with owner ref"
+	errAddInUseLabel    = "cannot add in use use label to the used resource"
+	errRemoveInUseLabel = "cannot remove in use label from the used resource"
+	errAddFinalizer     = "cannot add finalizer"
+	errRemoveFinalizer  = "cannot remove finalizer"
+	errUpdateStatus     = "cannot update status of usage"
 )
 
 // Event reasons.
 const (
-	reasonResolveSelectors       event.Reason = "ResolveSelectors"
-	reasonListUsages             event.Reason = "ListUsages"
-	reasonGetUsed                event.Reason = "GetUsedResource"
-	reasonGetUsing               event.Reason = "GetUsingResource"
-	reasonOwnerRefToUsage        event.Reason = "AddOwnerRefToUsage"
-	reasonOwnerRefToUsed         event.Reason = "AddOwnerRefToUsed"
-	reasonRemoveOwnerRefFromUsed event.Reason = "RemoveOwnerRefFromUsed"
-	reasonAddFinalizer           event.Reason = "AddFinalizer"
-	reasonRemoveFinalizer        event.Reason = "RemoveFinalizer"
+	reasonResolveSelectors event.Reason = "ResolveSelectors"
+	reasonListUsages       event.Reason = "ListUsages"
+	reasonGetUsed          event.Reason = "GetUsedResource"
+	reasonGetUsing         event.Reason = "GetUsingResource"
+	reasonOwnerRefToUsage  event.Reason = "AddOwnerRefToUsage"
+	reasonAddInUseLabel    event.Reason = "AddInUseLabel"
+	reasonRemoveInUseLabel event.Reason = "RemoveInUseLabel"
+	reasonAddFinalizer     event.Reason = "AddFinalizer"
+	reasonRemoveFinalizer  event.Reason = "RemoveFinalizer"
 
 	reasonUsageConfigured event.Reason = "UsageConfigured"
 	reasonWaitUsing       event.Reason = "WaitingUsingDeleted"
@@ -230,9 +233,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 			return reconcile.Result{}, err
 		}
 
-		// Remove the owner reference from the used resource if it exists
-		if err == nil && used.OwnedBy(u.GetUID()) {
-			used.RemoveOwnerRef(u.GetUID())
+		// Remove the in-use label from the used resource if no other usages
+		// exists.
+		if err == nil {
 			usageList := &v1alpha1.UsageList{}
 			if err = r.client.List(ctx, usageList, client.MatchingFields{usage.InUseIndexKey: usage.IndexValueForObject(used.GetUnstructured())}); err != nil {
 				log.Debug(errListUsages, "error", err)
@@ -244,12 +247,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 			// so we can remove the in-use label from the used resource
 			if len(usageList.Items) < 2 {
 				meta.RemoveLabels(used, inUseLabelKey)
-			}
-			if err = r.client.Update(ctx, used); err != nil {
-				log.Debug(errRemoveOwnerFromUsed, "error", err)
-				err = errors.Wrap(err, errRemoveOwnerFromUsed)
-				r.record.Event(u, event.Warning(reasonRemoveOwnerRefFromUsed, err))
-				return reconcile.Result{}, err
+				if err = r.client.Update(ctx, used); err != nil {
+					log.Debug(errRemoveInUseLabel, "error", err)
+					err = errors.Wrap(err, errRemoveInUseLabel)
+					r.record.Event(u, event.Warning(reasonRemoveInUseLabel, err))
+					return reconcile.Result{}, err
+				}
 			}
 		}
 
@@ -280,16 +283,16 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 		return reconcile.Result{}, err
 	}
 
-	// Used resource should have in-use label and be owned by the usageResource resource.
+	// Used resource should have in-use label.
 	if used.GetLabels()[inUseLabelKey] != "true" || !used.OwnedBy(u.GetUID()) {
+		// Note(turkenh): Composite controller will not remove this label with
+		// new reconciles since it uses a patching applicator to update the
+		// resource.
 		meta.AddLabels(used, map[string]string{inUseLabelKey: "true"})
-		meta.AddOwnerReference(used, meta.AsOwner(
-			meta.TypedReferenceTo(u, u.GetObjectKind().GroupVersionKind()),
-		))
 		if err := r.client.Update(ctx, used); err != nil {
-			log.Debug(errAddLabelAndOwnersToUsed, "error", err)
-			err = errors.Wrap(err, errAddLabelAndOwnersToUsed)
-			r.record.Event(u, event.Warning(reasonOwnerRefToUsed, err))
+			log.Debug(errAddInUseLabel, "error", err)
+			err = errors.Wrap(err, errAddInUseLabel)
+			r.record.Event(u, event.Warning(reasonAddInUseLabel, err))
 			return reconcile.Result{}, err
 		}
 	}
