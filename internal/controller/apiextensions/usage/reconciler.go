@@ -117,6 +117,30 @@ func WithRecorder(er event.Recorder) ReconcilerOption {
 	}
 }
 
+// WithClientApplicator specifies how the Reconciler should interact with the
+// Kubernetes API.
+func WithClientApplicator(c xpresource.ClientApplicator) ReconcilerOption {
+	return func(r *Reconciler) {
+		r.client = c
+	}
+}
+
+// WithFinalizer specifies how the Reconciler should add and remove
+// finalizers to and from the managed resource.
+func WithFinalizer(f xpresource.Finalizer) ReconcilerOption {
+	return func(r *Reconciler) {
+		r.usage.Finalizer = f
+	}
+}
+
+// WithSelectorResolver specifies how the Reconciler should resolve any
+// resource references it encounters while reconciling Usages.
+func WithSelectorResolver(sr selectorResolver) ReconcilerOption {
+	return func(r *Reconciler) {
+		r.usage.selectorResolver = sr
+	}
+}
+
 type usageResource struct {
 	xpresource.Finalizer
 	selectorResolver
@@ -127,8 +151,6 @@ func NewReconciler(mgr manager.Manager, opts ...ReconcilerOption) *Reconciler {
 	kube := unstructured.NewClient(mgr.GetClient())
 
 	r := &Reconciler{
-		mgr: mgr,
-
 		client: xpresource.ClientApplicator{
 			Client:     kube,
 			Applicator: xpresource.NewAPIUpdatingApplicator(kube),
@@ -154,7 +176,6 @@ func NewReconciler(mgr manager.Manager, opts ...ReconcilerOption) *Reconciler {
 // A Reconciler reconciles Usages.
 type Reconciler struct {
 	client xpresource.ClientApplicator
-	mgr    manager.Manager
 
 	usage usageResource
 
@@ -215,8 +236,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 			}
 
 			if l := u.GetLabels()[xcrd.LabelKeyNamePrefixForComposed]; len(l) > 0 && l == using.GetLabels()[xcrd.LabelKeyNamePrefixForComposed] && err == nil {
-				// If the usage and using xpresource are part of the same composite xpresource, we need to wait for the using xpresource to be deleted
-				msg := "Waiting for using xpresource to be deleted."
+				// If the usage and using resource are part of the same composite resource, we need to wait for the using resource to be deleted
+				msg := "Waiting for using resource to be deleted."
 				log.Debug(msg)
 				r.record.Event(u, event.Normal(reasonWaitUsing, msg))
 				return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
@@ -245,7 +266,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 				log.Debug(errListUsages, "error", err)
 				err = errors.Wrap(err, errListUsages)
 				r.record.Event(u, event.Warning(reasonListUsages, err))
-				return reconcile.Result{}, errors.Wrap(err, errListUsages)
+				return reconcile.Result{}, err
 			}
 			// There are no "other" usageResource's referencing the used xpresource,
 			// so we can remove the in-use label from the used xpresource
@@ -276,7 +297,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 		log.Debug(errAddFinalizer, "error", err)
 		err = errors.Wrap(err, errAddFinalizer)
 		r.record.Event(u, event.Warning(reasonAddFinalizer, err))
-		return reconcile.Result{}, nil
+		return reconcile.Result{}, err
 	}
 
 	// Get the used xpresource

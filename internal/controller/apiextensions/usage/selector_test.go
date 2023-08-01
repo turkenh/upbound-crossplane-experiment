@@ -2,15 +2,18 @@ package usage
 
 import (
 	"context"
-	"github.com/crossplane/crossplane-runtime/pkg/errors"
-	"github.com/crossplane/crossplane-runtime/pkg/test"
-	"github.com/crossplane/crossplane/apis/apiextensions/v1alpha1"
-	"github.com/crossplane/crossplane/internal/controller/apiextensions/usage/resource"
+	"testing"
+
 	"github.com/google/go-cmp/cmp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"testing"
+
+	"github.com/crossplane/crossplane-runtime/pkg/errors"
+	"github.com/crossplane/crossplane-runtime/pkg/test"
+
+	"github.com/crossplane/crossplane/apis/apiextensions/v1alpha1"
+	"github.com/crossplane/crossplane/internal/controller/apiextensions/usage/resource"
 )
 
 var errBoom = errors.New("boom")
@@ -368,7 +371,7 @@ func TestResolveSelectors(t *testing.T) {
 			reason: "If selectors defined for both \"of\" and \"by\", both should be resolved.",
 			args: args{
 				client: &test.MockClient{
-					MockList: func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+					MockList: test.NewMockListFn(nil, func(list client.ObjectList) error {
 						l := list.(*resource.UnstructuredList)
 						switch l.GetKind() {
 						case "SomeKindList":
@@ -408,7 +411,7 @@ func TestResolveSelectors(t *testing.T) {
 							t.Errorf("unexpected list kind: %s", l.GetKind())
 						}
 						return nil
-					},
+					}),
 					MockUpdate: func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
 						return nil
 					},
