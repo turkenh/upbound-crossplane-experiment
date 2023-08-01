@@ -10,7 +10,7 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/meta"
 
 	"github.com/crossplane/crossplane/apis/apiextensions/v1alpha1"
-	"github.com/crossplane/crossplane/internal/controller/apiextensions/usage/dependency"
+	"github.com/crossplane/crossplane/internal/controller/apiextensions/usage/resource"
 )
 
 type selectorResolver interface {
@@ -57,7 +57,7 @@ func (r *apiSelectorResolver) resolveSelectors(ctx context.Context, u *v1alpha1.
 }
 
 func (r *apiSelectorResolver) resolveSelector(ctx context.Context, u *v1alpha1.Usage, rs *v1alpha1.Resource) error {
-	l := dependency.NewList(dependency.FromReferenceToList(v1.ObjectReference{
+	l := resource.NewList(resource.FromReferenceToList(v1.ObjectReference{
 		APIVersion: rs.APIVersion,
 		Kind:       rs.Kind,
 	}))
