@@ -23,7 +23,7 @@ var _ admission.Handler = &Handler{}
 
 var errBoom = errors.New("boom")
 
-func TestHandler_Handle(t *testing.T) {
+func TestHandle(t *testing.T) {
 	protected := "This resource is protected!"
 	type args struct {
 		reader  client.Reader
@@ -321,7 +321,7 @@ func TestHandler_Handle(t *testing.T) {
 			h := NewHandler(tc.args.reader, WithLogger(logging.NewNopLogger()))
 			got := h.Handle(context.Background(), tc.args.request)
 			if diff := cmp.Diff(tc.want.resp, got); diff != "" {
-				t.Errorf("\nHandle(...): -want, +got:\n%s", diff)
+				t.Errorf("%s\nHandle(...): -want response, +got:\n%s", tc.reason, diff)
 			}
 		})
 	}

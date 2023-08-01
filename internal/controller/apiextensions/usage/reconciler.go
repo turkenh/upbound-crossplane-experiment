@@ -81,6 +81,10 @@ const (
 	reasonWaitUsing       event.Reason = "WaitingUsingDeleted"
 )
 
+type selectorResolver interface {
+	resolveSelectors(ctx context.Context, u *v1alpha1.Usage) error
+}
+
 // Setup adds a controller that reconciles Usages by
 // defining a composite xpresource and starting a controller to reconcile it.
 func Setup(mgr ctrl.Manager, o apiextensionscontroller.Options) error {
