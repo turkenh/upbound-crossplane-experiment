@@ -497,15 +497,21 @@ func ManagedResourcesOfClaimHaveFieldValueWithin(d time.Duration, dir, file, pat
 	}
 }
 
-// DeleteResourcesBlocked deletes (from the environment) all resources defined by the
-// manifests under the supplied directory that match the supplied glob pattern
-// (e.g. *.yaml).
-func DeleteResourcesBlocked(dir, pattern string) features.Func {
+// DeletionBlockedByUsageWebhook attempts deleting all resources
+// defined by the manifests under the supplied directory that match the supplied
+// glob pattern (e.g. *.yaml) and verifies that they are blocked by the usage
+// webhook.
+func DeletionBlockedByUsageWebhook(dir, pattern string) features.Func {
 	return func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
 		dfs := os.DirFS(dir)
 
-		if err := decoder.DecodeEachFile(ctx, dfs, pattern, decoder.DeleteHandler(c.Client().Resources())); !strings.HasPrefix(err.Error(), "admission webhook \"nousages.apiextensions.crossplane.io\" denied the request") {
-			t.Fatal(fmt.Errorf("expected admission webhook to deny the request but it did not, err: %s", err.Error()))
+		err := decoder.DecodeEachFile(ctx, dfs, pattern, decoder.DeleteHandler(c.Client().Resources()))
+		if err == nil {
+			t.Fatal("expected the usage webhook to deny the request but deletion succeeded")
+			return ctx
+		}
+		if !strings.HasPrefix(err.Error(), "admission webhook \"nousages.apiextensions.crossplane.io\" denied the request") {
+			t.Fatal(fmt.Sprintf("expected the usage webhook to deny the request but it failed with err: %s", err.Error()))
 			return ctx
 		}
 

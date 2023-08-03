@@ -157,55 +157,82 @@ func TestCompositionValidation(t *testing.T) {
 	)
 }
 
-// TestUsage tests scenarios for Crossplane's `Usage` resource.
-func TestUsage(t *testing.T) {
-	// Test that a claim using a very minimal Composition (with no patches,
-	// transforms, or functions) will become available when its composed
-	// resources do.
+// TestUsageStandalone tests scenarios for Crossplane's `Usage` resource without
+// a composition involved.
+func TestUsageStandalone(t *testing.T) {
 	manifests := "test/e2e/manifests/apiextensions/usage/managed-resources"
-	managedResources := features.Table{
+
+	cases := features.Table{
 		{
-			Name: "PrerequisitesAreCreated",
+			// Deletion of a (used) resource should be blocked if there is a Usage relation with a using resource defined.
+			Name: "UsageBlockedByUsingResource",
 			Assessment: funcs.AllOf(
-				funcs.ApplyResources(FieldManager, manifests, "prerequisites/*.yaml"),
-				funcs.ResourcesCreatedWithin(30*time.Second, manifests, "prerequisites/*.yaml"),
+				// Create using and used managed resources together with a usage.
+				funcs.ApplyResources(FieldManager, manifests, "with-by/*.yaml"),
+				funcs.ResourcesCreatedWithin(30*time.Second, manifests, "with-by/*.yaml"),
+				funcs.ResourcesHaveConditionWithin(1*time.Minute, manifests, "with-by/usage.yaml", xpv1.Available()),
+
+				// Deletion of used resource should be blocked by usage.
+				funcs.DeletionBlockedByUsageWebhook(manifests, "with-by/used.yaml"),
+
+				// Deletion of using resource should clear usage.
+				funcs.DeleteResources(manifests, "with-by/using.yaml"),
+				funcs.ResourcesDeletedWithin(30*time.Second, manifests, "with-by/using.yaml"),
+				funcs.ResourcesDeletedWithin(30*time.Second, manifests, "with-by/usage.yaml"),
+
+				// Deletion of used resource should be allowed after usage is cleared.
+				funcs.DeleteResources(manifests, "with-by/used.yaml"),
+				funcs.ResourcesDeletedWithin(30*time.Second, manifests, "with-by/used.yaml"),
 			),
 		},
 		{
-			Name: "ManagedResourcesAndUsageAreCreated",
+			// Deletion of a (protected) resource should be blocked if there is a Usage with a reason defined.
+			Name: "UsageBlockedWithReason",
 			Assessment: funcs.AllOf(
-				funcs.ApplyResources(FieldManager, manifests, "*.yaml"),
-				funcs.ResourcesCreatedWithin(30*time.Second, manifests, "*.yaml"),
-			),
-		},
-		{
-			Name: "UsedDeletionBlocked",
-			Assessment: funcs.AllOf(
-				funcs.DeleteResourcesBlocked(manifests, "used.yaml"),
-			),
-		},
-		{
-			Name: "DeletingUsingDeletedUsage",
-			Assessment: funcs.AllOf(
-				funcs.DeleteResources(manifests, "using.yaml"),
-				funcs.ResourcesDeletedWithin(30*time.Second, manifests, "using.yaml"),
-				funcs.ResourcesDeletedWithin(30*time.Second, manifests, "usage.yaml"),
-			),
-		},
-		{
-			Name: "UsedDeletionUnblocked",
-			Assessment: funcs.AllOf(
-				funcs.DeleteResources(manifests, "used.yaml"),
-				funcs.ResourcesDeletedWithin(30*time.Second, manifests, "used.yaml"),
+				// Create protected managed resources together with a usage.
+				funcs.ApplyResources(FieldManager, manifests, "with-reason/*.yaml"),
+				funcs.ResourcesCreatedWithin(30*time.Second, manifests, "with-reason/*.yaml"),
+				funcs.ResourcesHaveConditionWithin(1*time.Minute, manifests, "with-reason/usage.yaml", xpv1.Available()),
+
+				// Deletion of protected resource should be blocked by usage.
+				funcs.DeletionBlockedByUsageWebhook(manifests, "with-reason/used.yaml"),
+
+				// Deletion of usage should clear usage.
+				funcs.DeleteResources(manifests, "with-reason/usage.yaml"),
+				funcs.ResourcesDeletedWithin(30*time.Second, manifests, "with-reason/usage.yaml"),
+
+				// Deletion of protected resource should be allowed after usage is cleared.
+				funcs.DeleteResources(manifests, "with-reason/used.yaml"),
+				funcs.ResourcesDeletedWithin(30*time.Second, manifests, "with-reason/used.yaml"),
 			),
 		},
 	}
 
-	setup := funcs.ReadyToTestWithin(1*time.Minute, namespace)
 	environment.Test(t,
-		managedResources.Build("ManagedResources").
-			WithLabel("area", "apiextensions").
-			WithLabel("size", "small").
-			Setup(setup).Feature(),
+		cases.Build("UsageStandalone").
+			WithLabel(LabelStage, LabelStageAlpha).
+			WithLabel(LabelArea, LabelAreaAPIExtensions).
+			WithLabel(LabelSize, LabelSizeSmall).
+			WithLabel(LabelModifyCrossplaneInstallation, LabelModifyCrossplaneInstallationTrue).
+			// Enable the usage feature flag.
+			WithSetup("EnableAlphaUsages", funcs.AllOf(
+				funcs.AsFeaturesFunc(funcs.HelmUpgrade(HelmOptions(helm.WithArgs("--set args={--debug,--enable-usages}"))...)),
+				funcs.ReadyToTestWithin(1*time.Minute, namespace),
+			)).
+			WithSetup("CreatePrerequisites", funcs.AllOf(
+				funcs.ApplyResources(FieldManager, manifests, "setup/*.yaml"),
+				funcs.ResourcesCreatedWithin(30*time.Second, manifests, "setup/*.yaml"),
+				funcs.ResourcesHaveConditionWithin(2*time.Minute, manifests, "setup/provider.yaml", pkgv1.Healthy(), pkgv1.Active()),
+			)).
+			WithTeardown("DeletePrerequisites", funcs.AllOf(
+				funcs.DeleteResources(manifests, "setup/*.yaml"),
+				funcs.ResourcesDeletedWithin(3*time.Minute, manifests, "setup/*.yaml"),
+			)).
+			// Disable our feature flag.
+			WithTeardown("DisableAlphaUsages", funcs.AllOf(
+				funcs.AsFeaturesFunc(funcs.HelmUpgrade(HelmOptions()...)),
+				funcs.ReadyToTestWithin(1*time.Minute, namespace),
+			)).
+			Feature(),
 	)
 }
