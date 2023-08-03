@@ -16,14 +16,8 @@ spec:
   scope: Cluster
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.of.resourceRef.name
-      name: OF
-      type: string
-    - jsonPath: .spec.by.resourceRef.name
-      name: BY
-      type: string
-    - jsonPath: .status.conditions[?(@.type=='Synced')].status
-      name: SYNCED
+    - jsonPath: .metadata.annotations.crossplane\.io/usage-details
+      name: DETAILS
       type: string
     - jsonPath: .status.conditions[?(@.type=='Ready')].status
       name: READY
