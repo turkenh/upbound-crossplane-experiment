@@ -427,10 +427,25 @@ func CopyImageToRegistry(clusterName, ns, sName, image string, timeout time.Dura
 	}
 }
 
-// ManagedResourcesOfClaimHaveFieldValueWithin fails a test if the managed resources
-// created by the claim does not have the supplied value at the supplied path
-// within the supplied duration.
-func ManagedResourcesOfClaimHaveFieldValueWithin(d time.Duration, dir, file, path string, want any, filter func(object k8s.Object) bool) features.Func {
+// ComposedResourcesOfClaimHaveFieldValueWithin fails a test if the composed
+// resources created by the claim does not have the supplied value at the
+// supplied path within the supplied duration.
+func ComposedResourcesOfClaimHaveFieldValueWithin(d time.Duration, dir, file, path string, want any, filter func(object k8s.Object) bool) features.Func {
+	return ValidateComposedResourcesOfClaimWithin(d, dir, file, path, want, filter, func(object k8s.Object) bool {
+		u := asUnstructured(object)
+		got, err := fieldpath.Pave(u.Object).GetValue(path)
+		if err != nil {
+			return false
+		}
+
+		return cmp.Equal(want, got)
+	})
+}
+
+// ValidateComposedResourcesOfClaimWithin fails a test if the composed
+// resources created by the claim does not pass the supplied validation within
+// the supplied duration.
+func ValidateComposedResourcesOfClaimWithin(d time.Duration, dir, file, path string, want any, filter func(object k8s.Object) bool, validation func(object k8s.Object) bool) features.Func {
 	return func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
 		cm := &claim.Unstructured{}
 		if err := decoder.DecodeFile(os.DirFS(dir), file, cm); err != nil {
@@ -472,13 +487,8 @@ func ManagedResourcesOfClaimHaveFieldValueWithin(d time.Duration, dir, file, pat
 				return true
 			}
 			count.Add(1)
-			u := asUnstructured(o)
-			got, err := fieldpath.Pave(u.Object).GetValue(path)
-			if err != nil {
-				return false
-			}
 
-			return cmp.Equal(want, got)
+			return validation(o)
 		}
 
 		if err := wait.For(conditions.New(c.Client().Resources()).ResourcesMatch(list, match), wait.WithTimeout(d)); err != nil {
@@ -511,7 +521,7 @@ func DeletionBlockedByUsageWebhook(dir, pattern string) features.Func {
 			return ctx
 		}
 		if !strings.HasPrefix(err.Error(), "admission webhook \"nousages.apiextensions.crossplane.io\" denied the request") {
-			t.Fatal(fmt.Sprintf("expected the usage webhook to deny the request but it failed with err: %s", err.Error()))
+			t.Fatalf("expected the usage webhook to deny the request but it failed with err: %s", err.Error())
 			return ctx
 		}
 

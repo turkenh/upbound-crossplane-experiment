@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"sigs.k8s.io/e2e-framework/klient/k8s"
 	"sigs.k8s.io/e2e-framework/pkg/features"
 	"sigs.k8s.io/e2e-framework/third_party/helm"
 
@@ -160,7 +161,7 @@ func TestCompositionValidation(t *testing.T) {
 // TestUsageStandalone tests scenarios for Crossplane's `Usage` resource without
 // a composition involved.
 func TestUsageStandalone(t *testing.T) {
-	manifests := "test/e2e/manifests/apiextensions/usage/managed-resources"
+	manifests := "test/e2e/manifests/apiextensions/usage/standalone"
 
 	cases := features.Table{
 		{
@@ -219,10 +220,73 @@ func TestUsageStandalone(t *testing.T) {
 				funcs.AsFeaturesFunc(funcs.HelmUpgrade(HelmOptions(helm.WithArgs("--set args={--debug,--enable-usages}"))...)),
 				funcs.ReadyToTestWithin(1*time.Minute, namespace),
 			)).
-			WithSetup("CreatePrerequisites", funcs.AllOf(
+			WithSetup("PrerequisitesAreCreated", funcs.AllOf(
 				funcs.ApplyResources(FieldManager, manifests, "setup/*.yaml"),
 				funcs.ResourcesCreatedWithin(30*time.Second, manifests, "setup/*.yaml"),
 				funcs.ResourcesHaveConditionWithin(2*time.Minute, manifests, "setup/provider.yaml", pkgv1.Healthy(), pkgv1.Active()),
+			)).
+			WithTeardown("DeletePrerequisites", funcs.AllOf(
+				funcs.DeleteResources(manifests, "setup/*.yaml"),
+				funcs.ResourcesDeletedWithin(3*time.Minute, manifests, "setup/*.yaml"),
+			)).
+			// Disable our feature flag.
+			WithTeardown("DisableAlphaUsages", funcs.AllOf(
+				funcs.AsFeaturesFunc(funcs.HelmUpgrade(HelmOptions()...)),
+				funcs.ReadyToTestWithin(1*time.Minute, namespace),
+			)).
+			Feature(),
+	)
+}
+
+// TestUsageComposition tests scenarios for Crossplane's `Usage` resource as part
+// of a composition.
+func TestUsageComposition(t *testing.T) {
+	manifests := "test/e2e/manifests/apiextensions/usage/composition"
+
+	environment.Test(t,
+		features.New("UsageComposition").
+			WithLabel(LabelStage, LabelStageAlpha).
+			WithLabel(LabelArea, LabelAreaAPIExtensions).
+			WithLabel(LabelSize, LabelSizeSmall).
+			WithLabel(LabelModifyCrossplaneInstallation, LabelModifyCrossplaneInstallationTrue).
+			// Enable the usage feature flag.
+			WithSetup("EnableAlphaUsages", funcs.AllOf(
+				funcs.AsFeaturesFunc(funcs.HelmUpgrade(HelmOptions(helm.WithArgs("--set args={--debug,--enable-usages}"))...)),
+				funcs.ReadyToTestWithin(1*time.Minute, namespace),
+			)).
+			WithSetup("PrerequisitesAreCreated", funcs.AllOf(
+				funcs.ApplyResources(FieldManager, manifests, "setup/*.yaml"),
+				funcs.ResourcesCreatedWithin(30*time.Second, manifests, "setup/*.yaml"),
+				funcs.ResourcesHaveConditionWithin(1*time.Minute, manifests, "setup/definition.yaml", apiextensionsv1.WatchingComposite()),
+				funcs.ResourcesHaveConditionWithin(1*time.Minute, manifests, "setup/provider.yaml", pkgv1.Healthy(), pkgv1.Active()),
+			)).
+			Assess("ClaimCreatedAndReady", funcs.AllOf(
+				funcs.ApplyResources(FieldManager, manifests, "claim.yaml"),
+				funcs.ResourcesCreatedWithin(30*time.Second, manifests, "claim.yaml"),
+				funcs.ResourcesHaveConditionWithin(5*time.Minute, manifests, "claim.yaml", xpv1.Available()),
+			)).
+			Assess("UsedResourceHasInUseLabel", funcs.AllOf(
+				funcs.ComposedResourcesOfClaimHaveFieldValueWithin(1*time.Minute, manifests, "claim.yaml", "metadata.labels[crossplane.io/in-use]", "true", func(object k8s.Object) bool {
+					return object.GetLabels()["usage"] == "used"
+				}),
+			)).
+			Assess("ClaimDeleted", funcs.AllOf(
+				funcs.DeleteResources(manifests, "claim.yaml"),
+				funcs.ResourcesDeletedWithin(1*time.Minute, manifests, "claim.yaml"),
+			)).
+			// NOTE(turkenh): At this point, the claim is deleted and hence the
+			// garbage collector started attempting to delete all composed
+			// resources. With the help of a finalizer, we know that the using
+			// resource is still there and hence the deletion of the used
+			// resource should also be blocked. We will assess that below.
+			Assess("OthersDeletedButNotUsed", funcs.AllOf(
+			// TODO(turkenh): Resources other than the used one should have deletion timestamps (i.e. deleted by the garbage collector).
+			// TODO(turkenh): The used resource should not have a deletion timestamp since it is still in use.
+			)).
+			Assess("UsingDeletedAllGone", funcs.AllOf(
+			// TODO(turkenh): Remove the finalizer from the using resource.
+			// TODO(turkenh): The used resource should now be deleted by the garbage collector.
+			// TODO(turkenh): All composed resources should now be deleted including the Usage itself.
 			)).
 			WithTeardown("DeletePrerequisites", funcs.AllOf(
 				funcs.DeleteResources(manifests, "setup/*.yaml"),

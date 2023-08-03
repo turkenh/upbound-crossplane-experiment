@@ -140,7 +140,7 @@ func TestXfnRunnerImagePull(t *testing.T) {
 				funcs.ResourcesCreatedWithin(30*time.Second, manifests, "claim.yaml"),
 			)).
 			Assess("ClaimBecomesAvailable", funcs.ResourcesHaveConditionWithin(timeoutFive, manifests, "claim.yaml", xpv1.Available())).
-			Assess("ManagedResourcesProcessedByFunction", funcs.ManagedResourcesOfClaimHaveFieldValueWithin(timeoutFive, manifests, "claim.yaml", "metadata.labels[labelizer.xfn.crossplane.io/processed]", "true", nil)).
+			Assess("ManagedResourcesProcessedByFunction", funcs.ComposedResourcesOfClaimHaveFieldValueWithin(timeoutFive, manifests, "claim.yaml", "metadata.labels[labelizer.xfn.crossplane.io/processed]", "true", nil)).
 			WithTeardown("DeleteClaim", funcs.AllOf(
 				funcs.DeleteResources(manifests, "claim.yaml"),
 				funcs.ResourcesDeletedWithin(30*time.Second, manifests, "claim.yaml"),
@@ -240,7 +240,7 @@ func TestXfnRunnerWriteToTmp(t *testing.T) {
 			Assess("ClaimBecomesAvailable",
 				funcs.ResourcesHaveConditionWithin(timeoutFive, manifests, "claim.yaml", xpv1.Available())).
 			Assess("ManagedResourcesProcessedByFunction",
-				funcs.ManagedResourcesOfClaimHaveFieldValueWithin(timeoutFive, manifests, "claim.yaml", "metadata.labels[tmp-writer.xfn.crossplane.io]", "true",
+				funcs.ComposedResourcesOfClaimHaveFieldValueWithin(timeoutFive, manifests, "claim.yaml", "metadata.labels[tmp-writer.xfn.crossplane.io]", "true",
 					funcs.FilterByGK(schema.GroupKind{Group: "nop.crossplane.io", Kind: "NopResource"}))).
 			WithTeardown("DeleteClaim", funcs.AllOf(
 				funcs.DeleteResources(manifests, "claim.yaml"),
