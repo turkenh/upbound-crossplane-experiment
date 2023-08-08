@@ -20,7 +20,10 @@ import (
 	"testing"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"sigs.k8s.io/e2e-framework/klient/k8s"
+	"sigs.k8s.io/e2e-framework/klient/k8s/resources"
 	"sigs.k8s.io/e2e-framework/pkg/features"
 	"sigs.k8s.io/e2e-framework/third_party/helm"
 
@@ -28,6 +31,7 @@ import (
 
 	apiextensionsv1 "github.com/crossplane/crossplane/apis/apiextensions/v1"
 	pkgv1 "github.com/crossplane/crossplane/apis/pkg/v1"
+	"github.com/crossplane/crossplane/internal/controller/apiextensions/usage/resource"
 	"github.com/crossplane/crossplane/test/e2e/funcs"
 )
 
@@ -243,6 +247,16 @@ func TestUsageStandalone(t *testing.T) {
 func TestUsageComposition(t *testing.T) {
 	manifests := "test/e2e/manifests/apiextensions/usage/composition"
 
+	nopList := resource.NewList(resource.FromReferenceToList(corev1.ObjectReference{
+		APIVersion: "nop.crossplane.io/v1alpha1",
+		Kind:       "NopResource",
+	}))
+
+	usageList := resource.NewList(resource.FromReferenceToList(corev1.ObjectReference{
+		APIVersion: "apiextensions.crossplane.io/v1alpha1",
+		Kind:       "Usage",
+	}))
+
 	environment.Test(t,
 		features.New("UsageComposition").
 			WithLabel(LabelStage, LabelStageAlpha).
@@ -276,17 +290,33 @@ func TestUsageComposition(t *testing.T) {
 			)).
 			// NOTE(turkenh): At this point, the claim is deleted and hence the
 			// garbage collector started attempting to delete all composed
-			// resources. With the help of a finalizer, we know that the using
-			// resource is still there and hence the deletion of the used
-			// resource should also be blocked. We will assess that below.
-			Assess("OthersDeletedButNotUsed", funcs.AllOf(
-			// TODO(turkenh): Resources other than the used one should have deletion timestamps (i.e. deleted by the garbage collector).
-			// TODO(turkenh): The used resource should not have a deletion timestamp since it is still in use.
+			// resources. With the help of a finalizer (namely
+			// `delay-deletion-of-using-resource`, see in the composition),
+			// we know that the using resource is still there and hence the
+			// deletion of the used resource should be blocked. We will assess
+			// that below.
+			Assess("OthersDeletedExceptUsed", funcs.AllOf(
+				// Using resource should have a deletion timestamp (i.e. deleted by the garbage collector).
+				funcs.ListedResourcesValidatedWithin(1*time.Minute, nopList, 1, func(object k8s.Object) bool {
+					return object.GetDeletionTimestamp() != nil
+				}, resources.WithLabelSelector(labels.FormatLabels(map[string]string{"usage": "using"}))),
+				// Usage resource should not have a deletion timestamp since it is owned by the using resource.
+				funcs.ListedResourcesValidatedWithin(1*time.Minute, usageList, 1, func(object k8s.Object) bool {
+					return object.GetDeletionTimestamp() == nil
+				}),
+				// Used resource should not have a deletion timestamp since it is still in use.
+				funcs.ListedResourcesValidatedWithin(1*time.Minute, nopList, 1, func(object k8s.Object) bool {
+					return object.GetDeletionTimestamp() == nil
+				}, resources.WithLabelSelector(labels.FormatLabels(map[string]string{"usage": "used"}))),
 			)).
 			Assess("UsingDeletedAllGone", funcs.AllOf(
-			// TODO(turkenh): Remove the finalizer from the using resource.
-			// TODO(turkenh): The used resource should now be deleted by the garbage collector.
-			// TODO(turkenh): All composed resources should now be deleted including the Usage itself.
+				// Remove the finalizer from the using resource.
+				funcs.ListedResourcesModifiedWith(nopList, 1, func(object k8s.Object) {
+					object.SetFinalizers(nil)
+				}, resources.WithLabelSelector(labels.FormatLabels(map[string]string{"usage": "using"}))),
+				// All composed resources should now be deleted including the Usage itself.
+				funcs.ListedResourcesDeletedWithin(2*time.Minute, nopList),
+				funcs.ListedResourcesDeletedWithin(2*time.Minute, usageList),
 			)).
 			WithTeardown("DeletePrerequisites", funcs.AllOf(
 				funcs.DeleteResources(manifests, "setup/*.yaml"),

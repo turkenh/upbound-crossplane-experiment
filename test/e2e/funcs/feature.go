@@ -34,6 +34,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/daemon"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -431,21 +432,6 @@ func CopyImageToRegistry(clusterName, ns, sName, image string, timeout time.Dura
 // resources created by the claim does not have the supplied value at the
 // supplied path within the supplied duration.
 func ComposedResourcesOfClaimHaveFieldValueWithin(d time.Duration, dir, file, path string, want any, filter func(object k8s.Object) bool) features.Func {
-	return ValidateComposedResourcesOfClaimWithin(d, dir, file, path, want, filter, func(object k8s.Object) bool {
-		u := asUnstructured(object)
-		got, err := fieldpath.Pave(u.Object).GetValue(path)
-		if err != nil {
-			return false
-		}
-
-		return cmp.Equal(want, got)
-	})
-}
-
-// ValidateComposedResourcesOfClaimWithin fails a test if the composed
-// resources created by the claim does not pass the supplied validation within
-// the supplied duration.
-func ValidateComposedResourcesOfClaimWithin(d time.Duration, dir, file, path string, want any, filter func(object k8s.Object) bool, validation func(object k8s.Object) bool) features.Func {
 	return func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
 		cm := &claim.Unstructured{}
 		if err := decoder.DecodeFile(os.DirFS(dir), file, cm); err != nil {
@@ -487,8 +473,13 @@ func ValidateComposedResourcesOfClaimWithin(d time.Duration, dir, file, path str
 				return true
 			}
 			count.Add(1)
+			u := asUnstructured(o)
+			got, err := fieldpath.Pave(u.Object).GetValue(path)
+			if err != nil {
+				return false
+			}
 
-			return validation(o)
+			return cmp.Equal(want, got)
 		}
 
 		if err := wait.For(conditions.New(c.Client().Resources()).ResourcesMatch(list, match), wait.WithTimeout(d)); err != nil {
@@ -503,6 +494,76 @@ func ValidateComposedResourcesOfClaimWithin(d time.Duration, dir, file, path str
 		}
 
 		t.Logf("%d resources have desired value %q at field path %s", len(list.Items), want, path)
+		return ctx
+	}
+}
+
+// ListedResourcesValidatedWithin fails a test if the supplied list of resources
+// does not have the supplied number of resources that pass the supplied
+// validation function within the supplied duration.
+func ListedResourcesValidatedWithin(d time.Duration, list k8s.ObjectList, min int, validate func(object k8s.Object) bool, listOptions ...resources.ListOption) features.Func {
+	return func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+		if err := wait.For(conditions.New(c.Client().Resources()).ResourceListMatchN(list, min, validate, listOptions...), wait.WithTimeout(d)); err != nil {
+			y, _ := yaml.Marshal(list)
+			t.Errorf("resources didn't pass validation: %v:\n\n%s\n\n", err, y)
+			return ctx
+		}
+
+		t.Logf("%d resource(s) have desired conditions", min)
+		return ctx
+	}
+}
+
+// ListedResourcesDeletedWithin fails a test if the supplied list of resources
+// is not deleted within the supplied duration.
+func ListedResourcesDeletedWithin(d time.Duration, list k8s.ObjectList, listOptions ...resources.ListOption) features.Func {
+	return func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+		if err := c.Client().Resources().List(context.TODO(), list, listOptions...); err != nil {
+			return ctx
+		}
+		if err := wait.For(conditions.New(c.Client().Resources()).ResourcesDeleted(list), wait.WithTimeout(d)); err != nil {
+			y, _ := yaml.Marshal(list)
+			t.Errorf("resources wasn't deleted: %v:\n\n%s\n\n", err, y)
+			return ctx
+		}
+
+		t.Log("resources deleted")
+		return ctx
+	}
+}
+
+// ListedResourcesModifiedWith modifies the supplied list of resources with the
+// supplied function and fails a test if the supplied number of resources were
+// not modified within the supplied duration.
+func ListedResourcesModifiedWith(list k8s.ObjectList, min int, modify func(object k8s.Object), listOptions ...resources.ListOption) features.Func {
+	return func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+		if err := c.Client().Resources().List(context.TODO(), list, listOptions...); err != nil {
+			return ctx
+		}
+		var found int
+		metaList, err := meta.ExtractList(list)
+		if err != nil {
+			return ctx
+		}
+		for _, obj := range metaList {
+			if o, ok := obj.(k8s.Object); ok {
+				modify(o)
+				if err = c.Client().Resources().Update(context.Background(), o); err != nil {
+					t.Errorf("failed to update resource %s/%s: %v", o.GetNamespace(), o.GetName(), err)
+					return ctx
+				}
+				found++
+			} else if !ok {
+				t.Fatalf("unexpected type %T in list, does not satisfy k8s.Object", obj)
+				return ctx
+			}
+		}
+		if found < min {
+			t.Errorf("expected minimum %d resources to be modified, found %d", min, found)
+			return ctx
+		}
+
+		t.Logf("%d resource(s) have been modified", found)
 		return ctx
 	}
 }
